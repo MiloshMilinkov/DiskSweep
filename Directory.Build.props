@@ -1,0 +1,15 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Version>0.1.0</Version>
+    <Product>DiskSweep</Product>
+    <Authors>Miloš Milinkov</Authors>
+    <Company>Miloš Milinkov</Company>
+    <Copyright>Copyright (c) 2026 Miloš Milinkov. All rights reserved.</Copyright>
+    <!-- Proprietary: never packed or published as a package. -->
+    <IsPackable>false</IsPackable>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+</Project>
