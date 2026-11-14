@@ -4,9 +4,10 @@
 
 Please **do not** open a public issue for security problems.
 
-Once this repository is on GitHub, report them privately through its
-**Security → Report a vulnerability** page. Until then, or if that isn't
-possible, email milos300399@gmail.com with "SECURITY" in the subject.
+Report them privately through GitHub:
+**[Report a vulnerability](https://github.com/MiloshMilinkov/DiskSweep/security/advisories/new)**
+
+If that isn't possible, email milos300399@gmail.com with "SECURITY" in the subject.
 
 Please include:
 
