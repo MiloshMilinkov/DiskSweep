@@ -92,6 +92,10 @@ internal static unsafe partial class NativeMethods
         nint lpcSubKeys, nint lpcbMaxSubKeyLen, nint lpcbMaxClassLen, nint lpcValues, nint lpcbMaxValueNameLen,
         nint lpcbMaxValueLen, nint lpcbSecurityDescriptor, out FILETIME lpftLastWriteTime);
 
+    [LibraryImport("kernel32.dll", EntryPoint = "GetVolumeNameForVolumeMountPointW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetVolumeNameForVolumeMountPoint(string lpszVolumeMountPoint, char* lpszVolumeName, uint cchBufferLength);
+
     [LibraryImport("shell32.dll")]
     public static partial int SHGetKnownFolderPath(in Guid rfid, uint dwFlags, nint hToken, out nint ppszPath);
 

@@ -14,8 +14,6 @@
     </Window.DataContext>
 
     <Window.Resources>
-        <local:BoolToVisibilityConverter x:Key="Vis" />
-        <local:BoolToVisibilityConverter x:Key="NotVis" Invert="True" />
         <local:RiskToBrushConverter x:Key="RiskBrush" />
 
         <!-- A coloured pill for Safe / Review / Risky -->
@@ -122,10 +120,13 @@
             <DockPanel LastChildFill="False">
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="DiskSweep" Style="{StaticResource PageTitle}" />
-                    <TextBlock Text="Finds clutter that's safe to remove. This version only reports; nothing on your disk is changed."
+                    <TextBlock Text="Finds clutter that's safe to remove. Nothing is deleted: items go to the Recycle Bin or quarantine."
                                Foreground="{StaticResource MutedBrush}" VerticalAlignment="Bottom" Margin="16,0,0,2" />
                 </StackPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="Quarantine" Style="{StaticResource QuietButton}" Margin="0,0,12,0"
+                            Command="{Binding OpenQuarantineCommand}"
+                            ToolTip="See and restore items DiskSweep moved to quarantine." />
                     <Border CornerRadius="10" Padding="10,3" Background="{StaticResource CanvasBrush}" VerticalAlignment="Center">
                         <TextBlock Text="{Binding AccountText}" FontSize="12" Foreground="{StaticResource MutedBrush}" />
                     </Border>
@@ -263,7 +264,7 @@
 
                     <!-- Scanning -->
                     <StackPanel MaxWidth="640" VerticalAlignment="Center" Margin="40"
-                                Visibility="{Binding IsScanning, Converter={StaticResource Vis}}">
+                                Visibility="{Binding IsBusy, Converter={StaticResource Vis}}">
                         <TextBlock Text="{Binding PhaseText}" Style="{StaticResource PageTitle}" TextWrapping="Wrap" />
                         <ProgressBar Style="{StaticResource ThinBar}" Value="{Binding ProgressPercent, Mode=OneWay}" Margin="0,16,0,8" Height="8"
                                      AutomationProperties.Name="Scan progress" />
@@ -276,7 +277,7 @@
                                    TextTrimming="CharacterEllipsis" Margin="0,6,0,24" ToolTip="{Binding CurrentPath}" />
                         <StackPanel Orientation="Horizontal">
                             <Button Content="Cancel" Style="{StaticResource SecondaryButton}" Command="{Binding CancelCommand}" />
-                            <TextBlock Text="Read-only. Nothing is moved or deleted." Style="{StaticResource Small}"
+                            <TextBlock Text="{Binding BusyNote}" Style="{StaticResource Small}"
                                        VerticalAlignment="Center" Margin="16,0,0,0" />
                         </StackPanel>
                     </StackPanel>
@@ -409,8 +410,8 @@
                     <Button Content="Open log" Style="{StaticResource QuietButton}" Command="{Binding OpenLogCommand}" Margin="0,0,8,0" />
                     <Button Content="New scan" Style="{StaticResource SecondaryButton}" Command="{Binding NewScanCommand}" Margin="0,0,8,0"
                             Visibility="{Binding HasResults, Converter={StaticResource Vis}}" />
-                    <Button Content="Clean selected…" Style="{StaticResource PrimaryButton}" IsEnabled="False"
-                            ToolTip="Moving items to the Recycle Bin or quarantine arrives in phase 2. This version only reports."
+                    <Button Content="Clean selected…" Style="{StaticResource PrimaryButton}" Command="{Binding CleanCommand}"
+                            ToolTip="Tick items first. You'll confirm where they go before anything moves."
                             ToolTipService.ShowOnDisabled="True" />
                 </StackPanel>
                 <TextBlock Text="{Binding SelectionText}" VerticalAlignment="Center" Typography.NumeralAlignment="Tabular"

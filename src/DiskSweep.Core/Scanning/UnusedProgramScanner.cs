@@ -137,6 +137,7 @@ public sealed class UnusedProgramScanner : IScanner
                 Risk = risk,
                 Evidence = evidence,
                 UninstallCommand = p.UninstallString,
+                RegistryKeyPath = p.KeyPath,
                 QuietUninstallCommand = p.QuietUninstallString,
             });
         }

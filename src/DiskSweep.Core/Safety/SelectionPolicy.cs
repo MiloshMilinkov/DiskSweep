@@ -17,10 +17,12 @@ public static class SelectionPolicy
 
         if (item.Kind == ItemKind.Program)
         {
-            // Programs are only ever removed by launching their own uninstaller, never by deleting files.
-            return string.IsNullOrWhiteSpace(item.UninstallCommand) && string.IsNullOrWhiteSpace(item.QuietUninstallCommand)
-                ? SelectionDecision.Blocked("This program has no registered uninstaller.")
-                : new SelectionDecision(true, false, null);
+            // Programs are only ever removed by their own interactive uninstaller, never by deleting files
+            // and never silently: the program's uninstaller asks the user to confirm.
+            if (!string.IsNullOrWhiteSpace(item.UninstallCommand)) return new SelectionDecision(true, false, null);
+            return SelectionDecision.Blocked(string.IsNullOrWhiteSpace(item.QuietUninstallCommand)
+                ? "This program has no registered uninstaller."
+                : "Only a silent uninstaller is registered. DiskSweep only launches a program's interactive uninstaller.");
         }
 
         if (item.ContainsReparsePoint is not null)

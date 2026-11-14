@@ -166,6 +166,8 @@ public sealed class SafetyGuard
 
         if (Contains(RootProtectedNames, segments[0]))
             return $"\"{segments[0]}\" at the root of a drive is a protected system item.";
+        if (segments[0].Equals(AppPaths.QuarantineFolderName, PathUtil.Comparison))
+            return "DiskSweep's quarantine folder. Use Quarantine in DiskSweep to restore items or move them to the Recycle Bin.";
         foreach (string s in segments)
         {
             if (Contains(SystemSegmentNames, s)) return "Windows system folder (System32, SysWOW64 or WinSxS).";

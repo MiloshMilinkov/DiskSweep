@@ -46,6 +46,9 @@ public sealed class ScanItem
 
     /// <summary>Programs only: the uninstall commands exactly as registered by the program itself.</summary>
     public string? UninstallCommand { get; init; }
+
+    /// <summary>Programs only: the uninstall registry entry, re-read right before the uninstaller is launched.</summary>
+    public string? RegistryKeyPath { get; init; }
     public string? QuietUninstallCommand { get; init; }
     public string? Publisher { get; init; }
 }

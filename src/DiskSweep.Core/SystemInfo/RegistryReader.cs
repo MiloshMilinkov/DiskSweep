@@ -24,6 +24,27 @@ internal static class RegistryReader
         catch (IOException) { return null; }
     }
 
+    /// <summary>Opens a key from a path as DiskSweep displays it ("HKLM\SOFTWARE\…", "HKCU\…", "HKU\S-1-5-…\…"), read-only.</summary>
+    public static RegistryKey? OpenDisplayPath(string displayPath)
+    {
+        int slash = displayPath.IndexOf('\\');
+        if (slash <= 0) return null;
+        string hive = displayPath[..slash];
+        string rest = displayPath[(slash + 1)..];
+        switch (hive)
+        {
+            case "HKLM":
+                using (var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64))
+                    return Open(hklm, rest);
+            case "HKCU":
+                return Open(Registry.CurrentUser, rest);
+            case "HKU":
+                return Open(Registry.Users, rest);
+            default:
+                return null;
+        }
+    }
+
     public static string[] SubKeyNames(RegistryKey key)
     {
         try { return key.GetSubKeyNames(); }

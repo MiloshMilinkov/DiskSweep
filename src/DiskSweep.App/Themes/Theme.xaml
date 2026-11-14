@@ -1,5 +1,10 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:local="clr-namespace:DiskSweep.App">
+
+    <!-- Shared converters for every window -->
+    <local:BoolToVisibilityConverter x:Key="Vis" />
+    <local:BoolToVisibilityConverter x:Key="NotVis" Invert="True" />
 
     <!-- Palette: cool workbench grey, ink text, one deep-blue action colour, three risk colours. -->
     <Color x:Key="CanvasColor">#EDF0F3</Color>

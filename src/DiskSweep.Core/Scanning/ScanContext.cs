@@ -25,7 +25,8 @@ public sealed class ScanStatus
     public double Fraction => Volatile.Read(ref _fraction);
 
     internal void AddItem() => Interlocked.Increment(ref _itemsFound);
-    internal void AddScanned() => Interlocked.Increment(ref _entriesScanned);
+    /// <summary>Counts one more entry checked (or, during cleanup, one more item handled).</summary>
+    public void AddScanned() => Interlocked.Increment(ref _entriesScanned);
 
     internal void Plan(double totalWeight) => _totalWeight = Math.Max(totalWeight, 0.0001);
 
@@ -41,6 +42,14 @@ public sealed class ScanStatus
         Volatile.Write(ref _fraction, Math.Clamp((_doneWeight + Math.Clamp(f, 0, 1) * _currentWeight) / _totalWeight, 0, 1));
 
     internal void Complete() => Volatile.Write(ref _fraction, 1);
+
+    /// <summary>For steps outside the engine (like waiting for an uninstaller): sets what the progress screen shows.</summary>
+    public void Show(string phase, string detail, double fraction)
+    {
+        Phase = phase;
+        CurrentPath = detail;
+        Volatile.Write(ref _fraction, Math.Clamp(fraction, 0, 1));
+    }
 }
 
 public sealed class ScanContext

@@ -153,7 +153,7 @@ public sealed class LeftoverScanner : IScanner
         }
 
         var stats = FolderMeasure.Measure(path, ctx.Token);
-        DateTime newest = stats.NewestChangeUtc > c.Entry.NewestChangeUtc ? stats.NewestChangeUtc : c.Entry.NewestChangeUtc;
+        DateTime newest = stats.NewestChangeUtc; // includes the folder's own times
         int ageDays = ctx.AgeDays(newest);
 
         // A program that's gone doesn't write to its folder. Recent changes mean something still uses it.

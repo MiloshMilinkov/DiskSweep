@@ -23,12 +23,15 @@ No lint step beyond compiler warnings (keep them at 0). No deploy yet.
   - `IO/` — `FastDirectory` (FindFirstFileEx; never follows reparse points), `FolderMeasure`, `FileLockProbe`, long-path helpers.
   - `SystemInfo/` — read-only readers: profiles, installed programs, Store packages, services/tasks/startup references, processes, cloud roots, usage (Prefetch, UserAssist).
   - `Scanning/` — `ScanEngine` plus one `IScanner` per category.
+  - `Cleanup/` — `CleanupService` (re-checks every item right before it moves), `QuarantineStore`/`QuarantineRestorer`, `WindowsRecycleBin` + `RecycleBinPolicy`, `RestorePoint` (WMI), `UninstallLauncher`.
 - `src/DiskSweep.App` — WPF UI (`MainWindow.xaml`, `ViewModels/`, `Themes/Theme.xaml`).
 - `tests/DiskSweep.Core.Tests` — safety-layer tests (synthetic drive `Q:` via `TestLayouts`, real junctions via `TempTree`) and scanner tests.
 
 ## Rules
 
-- Phase order: 1 read-only scan (done) → 2 cleanup/restore/uninstaller launch → 3 settings/exclusions/CSV. Show the owner each phase before starting the next.
+- Phase order: 1 read-only scan (done) → 2 cleanup/restore/uninstaller launch (done) → 3 settings/exclusions/CSV. Show the owner each phase before starting the next.
+- Tests must never touch the user's real Recycle Bin or create `X:\DiskSweep Quarantine`: use `FakeRecycleBin` and a `QuarantineStore` rooted in a `TempTree` (see `CleanupTests`).
+- Never launch a real uninstaller or create a restore point while testing.
 - Never delete permanently; phase 2 moves to Recycle Bin or quarantine only. Re-run `SafetyGuard.Check` and re-walk folders for reparse points immediately before any move.
 - Never edit the registry: open keys only through `RegistryReader` (read-only).
 - Only `RiskLevel.Safe` items may be pre-selected. Leftovers are never Safe.

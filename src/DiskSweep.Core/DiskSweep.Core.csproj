@@ -11,4 +11,9 @@
     <InternalsVisibleTo Include="DiskSweep.Core.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- System Restore points (WMI root\default:SystemRestore). -->
+    <PackageReference Include="System.Management" Version="8.0.0" />
+  </ItemGroup>
+
 </Project>

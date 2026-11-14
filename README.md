@@ -7,7 +7,7 @@ A Windows desktop app that scans one drive and finds clutter that is safe to rem
 
 Safety comes first. Windows, installed programs, user profile roots, cloud-synced folders, repositories and links (junctions, symbolic links) can never be selected. Only items marked **Safe** are ticked automatically; **Review** and **Risky** items always need a manual tick.
 
-**Status: phase 1 (read-only).** Scanning and results work; cleanup arrives in phase 2. See [docs/design.md](docs/design.md).
+**Status: phase 2.** Scanning, cleanup (Recycle Bin or a per-drive quarantine you can restore from), System Restore points and launching a program's own uninstaller work. Settings, exclusions and CSV export come in phase 3. See [docs/design.md](docs/design.md).
 
 ## Requirements
 

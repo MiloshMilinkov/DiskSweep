@@ -1,0 +1,60 @@
+<Window x:Class="DiskSweep.App.Views.CleanupDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Clean selected items" Width="560" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize" ShowInTaskbar="False"
+        Background="{StaticResource SurfaceBrush}" Foreground="{StaticResource InkBrush}"
+        FontFamily="{StaticResource TextFont}" FontSize="13"
+        UseLayoutRounding="True" TextOptions.TextFormattingMode="Display">
+    <StackPanel Margin="28,24,28,22">
+        <TextBlock Text="{Binding Title}" Style="{StaticResource PageTitle}" />
+        <TextBlock Text="Nothing is deleted. You can get every item back." Foreground="{StaticResource MutedBrush}" Margin="0,4,0,18" />
+
+        <!-- Files and folders -->
+        <StackPanel Visibility="{Binding HasFiles, Converter={StaticResource Vis}}" Margin="0,0,0,18">
+            <TextBlock Text="{Binding FilesText}" Style="{StaticResource SectionTitle}" />
+            <RadioButton GroupName="Destination" IsChecked="{Binding UseRecycleBin}" Margin="0,2,0,10" AutomationProperties.Name="Recycle Bin">
+                <StackPanel Margin="4,0,0,0">
+                    <TextBlock Text="Move to the Recycle Bin" FontWeight="SemiBold" />
+                    <TextBlock Style="{StaticResource Small}"
+                               Text="Restore or empty them from the Recycle Bin as usual. Items the Bin can't take (removable drives, very long paths, bigger than the Bin's limit) stay where they are and are listed." />
+                </StackPanel>
+            </RadioButton>
+            <RadioButton GroupName="Destination" IsChecked="{Binding UseQuarantine}" AutomationProperties.Name="Quarantine">
+                <StackPanel Margin="4,0,0,0">
+                    <TextBlock Text="Move to quarantine" FontWeight="SemiBold" />
+                    <TextBlock Style="{StaticResource Small}"
+                               Text="Moved into a &quot;DiskSweep Quarantine&quot; folder on the same drive. Put them back any time from Quarantine in DiskSweep." />
+                </StackPanel>
+            </RadioButton>
+        </StackPanel>
+
+        <!-- Programs -->
+        <StackPanel Visibility="{Binding HasPrograms, Converter={StaticResource Vis}}" Margin="0,0,0,18">
+            <TextBlock Text="{Binding ProgramsText}" Style="{StaticResource SectionTitle}" TextWrapping="Wrap" />
+            <TextBlock Style="{StaticResource Small}"
+                       Text="Each program's own uninstaller opens, one at a time, and asks you to confirm in its window. DiskSweep never deletes program files itself." />
+        </StackPanel>
+
+        <!-- Restore point -->
+        <Border Background="{StaticResource CanvasBrush}" CornerRadius="6" Padding="12,10" Margin="0,0,0,22">
+            <StackPanel>
+                <CheckBox IsChecked="{Binding CreateRestorePoint}" IsEnabled="{Binding CanCreateRestorePoint}"
+                          AutomationProperties.Name="Create a System Restore point first">
+                    <StackPanel>
+                        <TextBlock Text="Create a System Restore point first" FontWeight="SemiBold" />
+                        <TextBlock Style="{StaticResource Small}" Text="Covers Windows, programs and settings, not your own files." />
+                    </StackPanel>
+                </CheckBox>
+                <TextBlock Style="{StaticResource Small}" Margin="28,6,0,0"
+                           Visibility="{Binding CanCreateRestorePoint, Converter={StaticResource NotVis}}"
+                           Text="Needs administrator rights. Close this, choose Restart as administrator, and scan again to include one." />
+            </StackPanel>
+        </Border>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Cancel" Style="{StaticResource SecondaryButton}" IsCancel="True" Margin="0,0,10,0" />
+            <Button Content="{Binding CleanButtonText}" Style="{StaticResource PrimaryButton}" Click="OnClean" />
+        </StackPanel>
+    </StackPanel>
+</Window>

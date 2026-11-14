@@ -1,5 +1,9 @@
 namespace DiskSweep.Core.IO;
 
+/// <param name="NewestChangeUtc">
+/// Newest creation or last-write time of the folder itself and everything inside it. Scanners store it as
+/// <c>ScanItem.LastModifiedUtc</c>, and cleanup refuses a folder whose value has moved on since the scan.
+/// </param>
 public sealed record FolderStats(
     long TotalBytes,
     int FileCount,
@@ -21,8 +25,13 @@ public static class FolderMeasure
     {
         long bytes = 0;
         int files = 0, folders = 0, executables = 0, seen = 0;
-        DateTime newest = DateTime.MinValue;
         string? reparse = null, cloud = null, unreadable = null;
+
+        // The folder's own times count too (renaming or emptying it changes its last-write time).
+        var self = new DirectoryInfo(root);
+        DateTime newest = self.Exists
+            ? (self.CreationTimeUtc > self.LastWriteTimeUtc ? self.CreationTimeUtc : self.LastWriteTimeUtc)
+            : DateTime.MinValue;
         bool truncated = false;
 
         var stack = new Stack<string>();

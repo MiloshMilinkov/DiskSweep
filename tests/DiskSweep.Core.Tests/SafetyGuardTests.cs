@@ -61,6 +61,10 @@ public class SafetyGuardTests
     [InlineData(@"Q:\Users\alice\OneDrive\Documents\cv.docx")]
     [InlineData(@"G:\My Drive\notes.txt")]
     [InlineData(@"Q:\Users\alice\AppData\Local\DiskSweep\logs\today.log")]
+    // DiskSweep's quarantine on any drive
+    [InlineData(@"Q:\DiskSweep Quarantine")]
+    [InlineData(@"D:\DiskSweep Quarantine\2026-11-14_101010_abc123\1\old.log")]
+    [InlineData(@"E:\diskSWEEP quarantine\x")]
     // Version-control data, anywhere
     [InlineData(@"D:\Projects\app\.git")]
     [InlineData(@"D:\Projects\app\.git\refs\tags")]

@@ -8,7 +8,7 @@ DiskSweep is a Windows 10/11 desktop app (C# / .NET 8, WPF, MVVM) that scans one
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Drive picker, read-only scanners for all categories, results UI | Done |
-| 2 | Recycle Bin / quarantine cleanup, restore view, launching a program's own uninstaller, restore point | Not started |
+| 2 | Recycle Bin / quarantine cleanup, restore view, launching a program's own uninstaller, restore point | Done |
 | 3 | Settings file, exclusion editor, CSV export / dry-run report, polish | Not started |
 
 ## Decisions made with the owner (2026-11-13)
@@ -34,6 +34,25 @@ DiskSweep is a Windows 10/11 desktop app (C# / .NET 8, WPF, MVVM) that scans one
 - Temp items: top-level entries of each temp folder. A folder is reported only if nothing inside changed in 2 days, nothing inside is open, it has no links and everything inside could be read.
 - "In use" is checked by opening for DELETE access with all share modes granted, so no other program is ever blocked.
 
+## Phase 2 decisions (2026-11-14)
+
+Made with the owner:
+
+- **Quarantine** lives in `<drive>:\DiskSweep Quarantine` on the item's own drive, so a move is a rename (no copy, no extra space, permissions unchanged). One sub-folder per cleanup run, one numbered slot per item, and an append-only `journal.jsonl` recording each original path; a line is appended before and after every move (the last line per slot wins, a line cut short by a crash is ignored). `SafetyGuard` protects a top-level `DiskSweep Quarantine` folder on every drive, so it's never scanned or offered, and DiskSweep refuses to write into it if it has been replaced by a link.
+- **Recycle Bin limits**: items Windows would delete permanently instead of recycling (removable drives, paths of 260+ characters, a Bin set to delete immediately, items bigger than the Bin's size limit, or 5% of the drive when no limit is recorded) are skipped and listed, never deleted. The Bin's current fill level plus everything recycled earlier in the run is counted too, so Windows never has to purge older Bin items to make room. `FOF_WANTNUKEWARNING` is set as a backstop.
+- **Restore point** is offered (admin only) before cleaning; Windows' result is verified by listing restore points. If none is created, the user is warned and chooses to continue or cancel.
+- **Uninstallers**: only the program's interactive `UninstallString` is launched, never `QuietUninstallString`; programs with only a silent uninstaller can't be ticked.
+
+Calls made during the build:
+
+- Right before every move, `CleanupService.CheckBeforeMove` re-runs the selection policy and safety guard, re-walks folders for links, cloud files and unreadable parts, refuses anything that changed since the scan (newer timestamp or different size; empty folders that gained files), and probes files for being open.
+- Restore never overwrites: if something exists at the original path, the item comes back as "name (restored)". It refuses when a parent folder on the way back is now a link or cloud folder, or the drive letter changed. Restoring and recycling from quarantine re-walk the item for links first.
+- The journal is an ordinary file anyone can edit, so it's never trusted: a stored path that leaves the batch folder is ignored, and restore refuses original locations inside Windows (except Windows\Temp) or any System32/SysWOW64/WinSxS folder.
+- An entry still marked Pending whose item is in the quarantine folder (the app stopped right after the move) can be restored like any other.
+- Emptying quarantine means "Move to Recycle Bin" (with the same Bin checks). DiskSweep never deletes user items permanently.
+- The uninstall command is re-read from the registry right before launch and must match the scan. Unquoted paths use the longest existing `.exe` prefix; bare names (msiexec.exe) resolve only in System32. Uninstallers run one at a time; afterwards the registry entry is checked to report whether the program is gone.
+- Items that weren't cleaned are unticked and listed at the top of the Skipped tab with the reason.
+
 ## Architecture
 
 ```
@@ -42,10 +61,11 @@ src/DiskSweep.Core      engine, no UI code
   IO/                   FastDirectory (FindFirstFileEx, never follows links), FolderMeasure, FileLockProbe
   SystemInfo/           profiles, installed programs, Store packages, references, processes, cloud roots, usage
   Scanning/             ScanEngine + one IScanner per category
+  Cleanup/              CleanupService, QuarantineStore/Restorer, WindowsRecycleBin, RestorePoint, UninstallLauncher
 src/DiskSweep.App       WPF + CommunityToolkit.Mvvm
 tests/DiskSweep.Core.Tests
 ```
 
-Every path a user could tick goes through `SelectableItem.TrySetSelected`, which re-runs `SelectionPolicy.Evaluate` → `SafetyGuard.Check` at the moment of the tick. Phase 2 cleanup must call `SafetyGuard.Check` again immediately before moving anything, and walk folder items for reparse points again.
+Every path a user could tick goes through `SelectableItem.TrySetSelected`, which re-runs `SelectionPolicy.Evaluate` → `SafetyGuard.Check` at the moment of the tick. `CleanupService` runs the same checks again immediately before each move and re-walks folders for reparse points.
 
-The registry is only ever opened read-only (`RegistryReader`). Nothing in phase 1 writes to disk except the log file in `%LOCALAPPDATA%\DiskSweep\logs`.
+The registry is only ever opened read-only (`RegistryReader`). Disk writes are limited to the log in `%LOCALAPPDATA%\DiskSweep\logs`, the quarantine folders, and the moves the user confirms.

@@ -110,7 +110,7 @@ public sealed class TempAndOldFileScanner : IScanner
             return;
         }
 
-        DateTime newest = stats.NewestChangeUtc > e.NewestChangeUtc ? stats.NewestChangeUtc : e.NewestChangeUtc;
+        DateTime newest = stats.NewestChangeUtc; // includes the folder's own times
         int age = ctx.AgeDays(newest);
         bool allChecked = stats.FileCount <= MaxLockChecksPerFolder;
 

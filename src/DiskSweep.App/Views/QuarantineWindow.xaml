@@ -1,0 +1,57 @@
+<Window x:Class="DiskSweep.App.Views.QuarantineWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Quarantine" Width="1040" Height="620" MinWidth="760" MinHeight="420"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{StaticResource CanvasBrush}" Foreground="{StaticResource InkBrush}"
+        FontFamily="{StaticResource TextFont}" FontSize="13"
+        UseLayoutRounding="True" TextOptions.TextFormattingMode="Display">
+    <Grid Margin="24,20,24,18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel>
+            <TextBlock Text="Quarantine" Style="{StaticResource PageTitle}" />
+            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,4,0,14" MaxWidth="820" HorizontalAlignment="Left"
+                       Text="Items DiskSweep moved aside, on every drive. Restore puts an item back where it came from; if something new is there now, it comes back next to it as &quot;(restored)&quot;. Nothing here is ever deleted for you." />
+        </StackPanel>
+
+        <Border Grid.Row="1" Background="{StaticResource SurfaceBrush}" CornerRadius="8" BorderBrush="{StaticResource RuleBrush}" BorderThickness="1">
+            <Grid>
+                <TextBlock Text="Nothing is in quarantine." Foreground="{StaticResource MutedBrush}" Margin="20"
+                           Visibility="{Binding IsEmpty, Converter={StaticResource Vis}}" />
+                <DataGrid ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry}" BorderThickness="0"
+                          Visibility="{Binding IsEmpty, Converter={StaticResource NotVis}}">
+                    <DataGrid.Columns>
+                        <DataGridTemplateColumn Width="44" CanUserSort="False" CanUserResize="False">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <CheckBox IsChecked="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanAct}"
+                                              VerticalAlignment="Center" VerticalContentAlignment="Center" AutomationProperties.Name="Select item" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn Header="Name" Width="1.4*" Binding="{Binding Name, Mode=OneWay}" ElementStyle="{StaticResource CellTextTip}" />
+                        <DataGridTextColumn Header="Came from" Width="3*" Binding="{Binding Folder, Mode=OneWay}" ElementStyle="{StaticResource MutedCellTextTip}" />
+                        <DataGridTextColumn Header="Size" Width="90" Binding="{Binding SizeText, Mode=OneWay}" SortMemberPath="SizeSort" ElementStyle="{StaticResource NumberCell}" />
+                        <DataGridTextColumn Header="Quarantined" Width="140" Binding="{Binding WhenText, Mode=OneWay}" SortMemberPath="WhenSort" ElementStyle="{StaticResource NumberCell}" />
+                        <DataGridTextColumn Header="State" Width="1.2*" Binding="{Binding StateText, Mode=OneWay}" ElementStyle="{StaticResource CellTextTip}" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Border>
+
+        <DockPanel Grid.Row="2" Margin="0,14,0,0">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
+                <Button Content="Open folder" Style="{StaticResource QuietButton}" Command="{Binding OpenFolderCommand}" Margin="0,0,8,0" />
+                <Button Content="Move to Recycle Bin" Style="{StaticResource SecondaryButton}" Command="{Binding RecycleSelectedCommand}" Margin="0,0,8,0" />
+                <Button Content="Restore selected" Style="{StaticResource PrimaryButton}" Command="{Binding RestoreSelectedCommand}" Margin="0,0,8,0" />
+                <Button Content="Close" Style="{StaticResource SecondaryButton}" IsCancel="True" Click="OnClose" />
+            </StackPanel>
+            <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,16,0" />
+        </DockPanel>
+    </Grid>
+</Window>

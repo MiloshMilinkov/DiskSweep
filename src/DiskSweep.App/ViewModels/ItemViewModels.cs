@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DiskSweep.Core.IO;
 using DiskSweep.Core.Models;
@@ -112,16 +111,25 @@ public abstract class TabViewModel : ObservableObject
 public sealed class ResultTabViewModel : TabViewModel
 {
     public ScanCategory Category { get; }
-    public ObservableCollection<ScanItemViewModel> Items { get; }
+    public BulkObservableCollection<ScanItemViewModel> Items { get; }
 
     public ResultTabViewModel(ScanCategory category, IEnumerable<ScanItemViewModel> items)
     {
         Category = category;
-        Items = new ObservableCollection<ScanItemViewModel>(items);
+        Items = new BulkObservableCollection<ScanItemViewModel>(items);
     }
 
     public override string Header => $"{ScanCategoryInfo.Title(Category)}  {Items.Count:N0}";
     public bool IsEmpty => Items.Count == 0;
+
+    /// <summary>Drops rows that were cleaned up.</summary>
+    public void Remove(IReadOnlySet<ScanItemViewModel> gone)
+    {
+        if (!Items.Any(gone.Contains)) return;
+        Items.ReplaceAll(Items.Where(i => !gone.Contains(i)));
+        OnPropertyChanged(nameof(Header));
+        OnPropertyChanged(nameof(IsEmpty));
+    }
     public bool ShowSize => Category is not (ScanCategory.OrphanedRegistry or ScanCategory.UnusedPrograms or ScanCategory.EmptyFolders);
     public bool ShowConfidence => Category == ScanCategory.Leftovers;
     public bool ShowLastUsed => Category == ScanCategory.UnusedPrograms;
@@ -140,13 +148,23 @@ public sealed class ResultTabViewModel : TabViewModel
 
 public sealed class SkippedTabViewModel : TabViewModel
 {
-    public IReadOnlyList<SkippedEntry> Items { get; }
-    public int Total { get; }
+    public BulkObservableCollection<SkippedEntry> Items { get; }
+    public int Total { get; private set; }
 
     public SkippedTabViewModel(IReadOnlyList<SkippedEntry> items, int total)
     {
-        Items = items;
+        Items = new(items);
         Total = total;
+    }
+
+    /// <summary>Adds items a cleanup left alone, at the top so they're seen first.</summary>
+    public void Prepend(IReadOnlyList<SkippedEntry> entries)
+    {
+        if (entries.Count == 0) return;
+        Items.ReplaceAll(entries.Concat(Items));
+        Total += entries.Count;
+        OnPropertyChanged(nameof(Header));
+        OnPropertyChanged(nameof(Summary));
     }
 
     public override string Header => $"Skipped  {Total:N0}";

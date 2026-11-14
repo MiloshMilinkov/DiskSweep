@@ -134,7 +134,7 @@ public sealed class EmptyFolderScanner : IScanner
 
     private static void Report(ScanContext ctx, Frame f)
     {
-        int folders = Count(f, out bool hiddenOrSystem);
+        var (folders, hiddenOrSystem, newest) = Count(f);
         string path = f.Self.FullPath;
 
         var verdict = ctx.Guard.Check(path);
@@ -184,21 +184,23 @@ public sealed class EmptyFolderScanner : IScanner
             Path = path,
             DisplayName = f.Self.Name,
             SizeBytes = 0,
-            LastModifiedUtc = f.Self.LastWriteUtc,
+            LastModifiedUtc = newest, // newest change anywhere in the tree: the baseline cleanup re-checks against
             Reason = folders == 1 ? "Empty folder" : $"Empty folder tree ({folders} folders)",
             Risk = risk,
             Evidence = evidence,
         });
     }
 
-    private static int Count(Frame f, out bool hiddenOrSystem)
+    /// <summary>Folders in the empty tree, whether any is hidden/system, and the newest change anywhere in it.</summary>
+    private static (int Folders, bool HiddenOrSystem, DateTime Newest) Count(Frame f)
     {
-        hiddenOrSystem = f.HiddenOrSystem;
-        int total = 1;
+        var total = (Folders: 1, HiddenOrSystem: f.HiddenOrSystem, Newest: f.Self.NewestChangeUtc);
         foreach (var c in f.EligibleChildren)
         {
-            total += Count(c, out bool h);
-            hiddenOrSystem |= h;
+            var child = Count(c);
+            total.Folders += child.Folders;
+            total.HiddenOrSystem |= child.HiddenOrSystem;
+            if (child.Newest > total.Newest) total.Newest = child.Newest;
         }
         return total;
     }

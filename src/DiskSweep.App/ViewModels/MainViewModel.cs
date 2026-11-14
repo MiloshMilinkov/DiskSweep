@@ -13,7 +13,7 @@ using DiskSweep.Core.SystemInfo;
 
 namespace DiskSweep.App.ViewModels;
 
-public enum ScreenState { Idle, Scanning, Results }
+public enum ScreenState { Idle, Scanning, Results, Cleaning }
 
 public sealed partial class MainViewModel : ObservableObject
 {
@@ -23,6 +23,11 @@ public sealed partial class MainViewModel : ObservableObject
     private CancellationTokenSource? _cts;
     private Stopwatch _clock = new();
     private List<ScanItemViewModel> _allItems = [];
+    /// <summary>The scan the results on screen came from (its guard is used for every tick and every move).</summary>
+    private ScanResult? _scan;
+    /// <summary>True while many rows change at once, so the selection total is recomputed once at the end instead of per row.</summary>
+    private bool _bulkUpdating;
+    private int _cleanTotal;
     private static readonly ScanOptions Defaults = new();
 
     public MainViewModel()
@@ -70,14 +75,18 @@ public sealed partial class MainViewModel : ObservableObject
     // ── Screen state ──────────────────────────────────────────────────────
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsIdle), nameof(IsScanning), nameof(HasResults), nameof(CanEditOptions))]
-    [NotifyCanExecuteChangedFor(nameof(ScanCommand))]
+    [NotifyPropertyChangedFor(nameof(IsIdle), nameof(IsBusy), nameof(HasResults), nameof(CanEditOptions), nameof(BusyNote))]
+    [NotifyCanExecuteChangedFor(nameof(ScanCommand), nameof(CleanCommand), nameof(OpenQuarantineCommand))]
     private ScreenState _state = ScreenState.Idle;
 
     public bool IsIdle => State == ScreenState.Idle;
-    public bool IsScanning => State == ScreenState.Scanning;
+    /// <summary>Scanning or cleaning: the progress screen is showing.</summary>
+    public bool IsBusy => State is ScreenState.Scanning or ScreenState.Cleaning;
     public bool HasResults => State == ScreenState.Results;
-    public bool CanEditOptions => State != ScreenState.Scanning;
+    public bool CanEditOptions => !IsBusy;
+    public string BusyNote => State == ScreenState.Cleaning
+        ? "Items are moved, never deleted. Stop finishes the current item first."
+        : "Read-only. Nothing is moved or deleted.";
 
     // ── Scanning ──────────────────────────────────────────────────────────
 
@@ -90,7 +99,7 @@ public sealed partial class MainViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(CancelCommand))]
     private bool _isCancelling;
 
-    private bool CanScan() => State != ScreenState.Scanning && SelectedDrive is not null && Categories.Any(c => c.IsChecked);
+    private bool CanScan() => !IsBusy && SelectedDrive is not null && Categories.Any(c => c.IsChecked);
 
     [RelayCommand(CanExecute = nameof(CanScan))]
     private async Task ScanAsync()
@@ -145,7 +154,9 @@ public sealed partial class MainViewModel : ObservableObject
         ProgressPercent = _status.Fraction * 100;
         if (!IsCancelling) PhaseText = _status.Phase;
         CurrentPath = _status.CurrentPath;
-        FoundText = $"{_status.ItemsFound:N0} found, {_status.EntriesScanned:N0} checked";
+        FoundText = State == ScreenState.Cleaning
+            ? $"{_status.EntriesScanned:N0} of {_cleanTotal:N0} done"
+            : $"{_status.ItemsFound:N0} found, {_status.EntriesScanned:N0} checked";
         ElapsedText = _clock.Elapsed.ToString(@"m\:ss");
     }
 
@@ -177,6 +188,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         // Each row's safety check touches the disk, so build the rows off the UI thread.
         var guard = result.Guard;
+        _scan = result;
         _allItems = guard is null
             ? []
             : await Task.Run(() => result.Items.Select(i => new ScanItemViewModel(new SelectableItem(i, guard))).ToList());
@@ -194,16 +206,23 @@ public sealed partial class MainViewModel : ObservableObject
         foreach (string note in result.Notes) Notes.Add(note);
         LogFilePath = result.LogFilePath;
 
-        long total = _allItems.Sum(i => i.Bytes);
-        SummaryText = $"{_allItems.Count:N0} items on {result.Request.Drive.Letter}, {PathUtil.FormatBytes(total)} in files and folders. " +
-                      $"Scanned in {result.Duration:m\\:ss}{(result.WasCancelled ? " (cancelled)" : "")}.";
-        RiskBuckets = RiskBucketViewModel.Build(_allItems.Where(i => !i.Item.IsReportOnly).ToList());
-
-        UpdateSelectionText();
+        RefreshTotals();
         State = ScreenState.Results;
     }
 
-    private void OnItemSelectionChanged(object? sender, EventArgs e) => UpdateSelectionText();
+    private void RefreshTotals()
+    {
+        long total = _allItems.Sum(i => i.Bytes);
+        SummaryText = $"{_allItems.Count:N0} items on {_scan?.Request.Drive.Letter}, {PathUtil.FormatBytes(total)} in files and folders. " +
+                      $"Scanned in {_scan?.Duration:m\\:ss}{(_scan?.WasCancelled == true ? " (cancelled)" : "")}.";
+        RiskBuckets = RiskBucketViewModel.Build(_allItems.Where(i => !i.Item.IsReportOnly).ToList());
+        UpdateSelectionText();
+    }
+
+    private void OnItemSelectionChanged(object? sender, EventArgs e)
+    {
+        if (!_bulkUpdating) UpdateSelectionText();
+    }
 
     private void UpdateSelectionText()
     {
@@ -212,6 +231,7 @@ public sealed partial class MainViewModel : ObservableObject
         SelectionText = selected.Count == 0
             ? "Nothing selected"
             : $"{selected.Count:N0} selected, {PathUtil.FormatBytes(bytes)}";
+        CleanCommand.NotifyCanExecuteChanged();
     }
 
     [RelayCommand]
@@ -234,7 +254,7 @@ public sealed partial class MainViewModel : ObservableObject
             App.Log.Info("Restarting as administrator.");
             Application.Current.Shutdown();
         }
-        catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
+        catch (Win32Exception ex) when (ex.NativeErrorCode == Core.Cleanup.UninstallLauncher.ErrorCancelled)
         {
             // The user said no to the Windows prompt; keep running as is.
         }
@@ -254,7 +274,6 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanShowInExplorer))]
     private void ShowInExplorer()
     {
-        if (SelectedItem is null) return;
-        Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{SelectedItem.Path}\"") { UseShellExecute = true });
+        if (SelectedItem is not null) Explorer.Select(SelectedItem.Path);
     }
 }
