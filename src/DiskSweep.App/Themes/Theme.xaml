@@ -145,8 +145,13 @@
                         <Border x:Name="Box" Width="18" Height="18" CornerRadius="4" BorderThickness="1.5"
                                 BorderBrush="{StaticResource MutedBrush}" Background="{StaticResource SurfaceBrush}"
                                 VerticalAlignment="{TemplateBinding VerticalContentAlignment}" Margin="0,1,0,0">
-                            <Path x:Name="Mark" Data="M 3.5,9 L 7.5,13 L 14.5,5" Stroke="White" StrokeThickness="2"
-                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Visibility="Collapsed" />
+                            <Grid>
+                                <Path x:Name="Mark" Data="M 3.5,9 L 7.5,13 L 14.5,5" Stroke="White" StrokeThickness="2"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Visibility="Collapsed" />
+                                <!-- Part-ticked: some of the rows a "tick all" box covers are ticked -->
+                                <Path x:Name="Dash" Data="M 4,7.5 L 11,7.5" Stroke="White" StrokeThickness="2"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" Visibility="Collapsed" />
+                            </Grid>
                         </Border>
                         <ContentPresenter Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" RecognizesAccessKey="True" />
                     </Grid>
@@ -155,6 +160,11 @@
                             <Setter TargetName="Box" Property="Background" Value="{StaticResource AccentBrush}" />
                             <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
                             <Setter TargetName="Mark" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="{x:Null}">
+                            <Setter TargetName="Box" Property="Background" Value="{StaticResource AccentBrush}" />
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                            <Setter TargetName="Dash" Property="Visibility" Value="Visible" />
                         </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
@@ -263,7 +273,8 @@
                         <Border DockPanel.Dock="Top" BorderThickness="0,0,0,1" BorderBrush="{StaticResource RuleBrush}">
                             <WrapPanel IsItemsHost="True" />
                         </Border>
-                        <ContentPresenter ContentSource="SelectedContent" Margin="0,10,0,0" />
+                        <!-- The name lets UI Automation (screen readers, test scripts) see the selected tab's content. -->
+                        <ContentPresenter x:Name="PART_SelectedContentHost" ContentSource="SelectedContent" Margin="0,10,0,0" />
                     </DockPanel>
                 </ControlTemplate>
             </Setter.Value>

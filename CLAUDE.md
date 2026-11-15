@@ -35,6 +35,7 @@ No lint step beyond compiler warnings (keep them at 0). No deploy yet.
 - Never delete permanently; phase 2 moves to Recycle Bin or quarantine only. Re-run `SafetyGuard.Check` and re-walk folders for reparse points immediately before any move.
 - Never edit the registry: open keys only through `RegistryReader` (read-only).
 - Only `RiskLevel.Safe` items may be pre-selected. Leftovers are never Safe.
+- Bulk "Tick all" covers Safe and Review only (`SelectionPolicy.AllowsBulkTick`); Risky items are ticked one at a time.
 - Program removal may only launch the program's own `UninstallString` / `QuietUninstallString`.
 - New protections go in `SafetyGuard` with a test in `SafetyGuardTests`; never weaken an existing rule without the owner's OK.
 - Runs as `asInvoker`; admin is optional ("Restart as administrator").
@@ -46,4 +47,4 @@ No lint step beyond compiler warnings (keep them at 0). No deploy yet.
 - XAML `Style.Triggers` must come after all `Setter`s or the build fails with MC3088.
 - DataGrid columns aren't in the visual tree: bind their `Visibility` through the `BindingProxy` resource.
 - Last-access times on .exe files are often refreshed by antivirus scans, so they only ever make programs look *more* used (safe direction).
-- The app can be driven for checks with UI Automation (button names = their text, e.g. "Scan C:") and screenshotted with `PrintWindow`.
+- The app can be driven for checks with UI Automation (button names = their text, e.g. "Scan C:") and screenshotted with `PrintWindow`. Results-tab content is reachable only because the TabControl template names its presenter `PART_SelectedContentHost` (row boxes are "Select item", plus "Tick all Safe items", "Tick all Review items", "Untick all"). WPF ignores posted mouse messages, so use UIA patterns, not `PostMessage` clicks. Call `SetThreadDpiAwarenessContext(-4)` before `PrintWindow`, or the shot is cropped at display scaling above 100%.

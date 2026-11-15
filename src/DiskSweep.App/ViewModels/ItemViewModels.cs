@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using DiskSweep.Core.IO;
 using DiskSweep.Core.Models;
 using DiskSweep.Core.Safety;
@@ -44,12 +45,13 @@ public sealed class ScanItemViewModel : ObservableObject
         get => _selectable.IsSelected;
         set
         {
-            bool before = _selectable.IsSelected;
+            bool before = _selectable.IsSelected, couldSelect = CanSelect;
             _selectable.TrySetSelected(value); // re-runs the safety checks; may refuse
             OnPropertyChanged();
             OnPropertyChanged(nameof(CanSelect));
             OnPropertyChanged(nameof(SelectionNote));
-            if (before != _selectable.IsSelected) SelectionChanged?.Invoke(this, EventArgs.Empty);
+            // A refused tick can make the row unselectable, which changes the "Tick all" counts too.
+            if (before != _selectable.IsSelected || couldSelect != CanSelect) SelectionChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -103,20 +105,108 @@ public sealed record RiskBucketViewModel(RiskLevel Risk, string Legend, System.W
     }
 }
 
+/// <summary>A results tab's "Tick all" box for one risk level: ticked when all its rows are, part-ticked when some are.</summary>
+public sealed class RiskTickViewModel : ObservableObject
+{
+    private readonly Action<RiskLevel, bool> _tickAll;
+    private int _ticked;
+
+    public RiskTickViewModel(RiskLevel risk, Action<RiskLevel, bool> tickAll)
+    {
+        Risk = risk;
+        _tickAll = tickAll;
+    }
+
+    public RiskLevel Risk { get; }
+    /// <summary>Read by the RiskPill template.</summary>
+    public string RiskText => Risk.ToString();
+    public string AutomationName => $"Tick all {Risk} items";
+    /// <summary>Rows of this level that can be ticked.</summary>
+    public int Count { get; private set; }
+    public string CountText => Count == 1 ? "1 item" : $"{Count:N0} items";
+
+    public bool? IsChecked
+    {
+        get => _ticked == 0 ? false : _ticked == Count ? true : null;
+        // Clicking a part-ticked box arrives as false; it ticks the rest instead.
+        set => _tickAll(Risk, value == true || IsChecked is null);
+    }
+
+    public void Update(int count, int ticked)
+    {
+        Count = count;
+        _ticked = ticked;
+        OnPropertyChanged(nameof(Count));
+        OnPropertyChanged(nameof(CountText));
+        OnPropertyChanged(nameof(IsChecked));
+    }
+}
+
 public abstract class TabViewModel : ObservableObject
 {
     public abstract string Header { get; }
 }
 
-public sealed class ResultTabViewModel : TabViewModel
+public sealed partial class ResultTabViewModel : TabViewModel
 {
+    /// <summary>Runs a change to many rows' ticks with one totals refresh at the end.</summary>
+    private readonly Action<Action> _batch;
+
     public ScanCategory Category { get; }
     public BulkObservableCollection<ScanItemViewModel> Items { get; }
 
-    public ResultTabViewModel(ScanCategory category, IEnumerable<ScanItemViewModel> items)
+    public ResultTabViewModel(ScanCategory category, IEnumerable<ScanItemViewModel> items, Action<Action> batch)
     {
         Category = category;
         Items = new BulkObservableCollection<ScanItemViewModel>(items);
+        _batch = batch;
+        TickLevels = Enum.GetValues<RiskLevel>().Where(SelectionPolicy.AllowsBulkTick)
+            .Select(r => new RiskTickViewModel(r, TickLevel)).ToList();
+        RefreshTicks();
+    }
+
+    // ── Ticking a whole risk level in this tab (never Risky: those are ticked one at a time) ──
+
+    /// <summary>One "Tick all" box per level the selection policy lets the user tick in bulk.</summary>
+    public IReadOnlyList<RiskTickViewModel> TickLevels { get; }
+    public bool HasBulkTick => TickLevels.Any(l => l.Count > 0);
+    /// <summary>Some rows can be ticked, so the bar (with "Untick all") is shown.</summary>
+    public bool HasTickable => Items.Any(i => i.CanSelect);
+    /// <summary>Some tickable rows are at a level that's only ticked one at a time (Risky).</summary>
+    public bool HasOneAtATime => Items.Any(i => i.CanSelect && !SelectionPolicy.AllowsBulkTick(i.Risk));
+
+    private IEnumerable<ScanItemViewModel> Tickable(RiskLevel risk) => Items.Where(i => i.Risk == risk && i.CanSelect);
+
+    private void TickLevel(RiskLevel risk, bool tick)
+    {
+        var rows = Tickable(risk).Where(i => i.IsSelected != tick).ToList();
+        _batch(() =>
+        {
+            foreach (var row in rows) row.IsSelected = tick; // each tick re-runs the safety checks
+        });
+    }
+
+    [RelayCommand]
+    private void UntickAll()
+    {
+        var rows = Items.Where(i => i.IsSelected).ToList();
+        _batch(() =>
+        {
+            foreach (var row in rows) row.IsSelected = false;
+        });
+    }
+
+    /// <summary>Recounts the level boxes after any tick changes.</summary>
+    public void RefreshTicks()
+    {
+        foreach (var level in TickLevels)
+        {
+            var rows = Tickable(level.Risk).ToList();
+            level.Update(rows.Count, rows.Count(i => i.IsSelected));
+        }
+        OnPropertyChanged(nameof(HasBulkTick));
+        OnPropertyChanged(nameof(HasTickable));
+        OnPropertyChanged(nameof(HasOneAtATime));
     }
 
     public override string Header => $"{ScanCategoryInfo.Title(Category)}  {Items.Count:N0}";

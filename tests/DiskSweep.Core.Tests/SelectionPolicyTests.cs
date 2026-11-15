@@ -29,6 +29,14 @@ public class SelectionPolicyTests
         Assert.True(risky.TrySetSelected(true));
     }
 
+    [Fact]
+    public void Only_safe_and_review_levels_can_be_ticked_in_bulk()
+    {
+        Assert.True(SelectionPolicy.AllowsBulkTick(RiskLevel.Safe));
+        Assert.True(SelectionPolicy.AllowsBulkTick(RiskLevel.Review));
+        Assert.False(SelectionPolicy.AllowsBulkTick(RiskLevel.Risky));
+    }
+
     [Theory]
     [InlineData(@"Q:\Windows\System32")]
     [InlineData(@"Q:\Program Files")]

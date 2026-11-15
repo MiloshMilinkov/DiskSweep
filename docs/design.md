@@ -42,6 +42,7 @@ Made with the owner:
 - **Recycle Bin limits**: items Windows would delete permanently instead of recycling (removable drives, paths of 260+ characters, a Bin set to delete immediately, items bigger than the Bin's size limit, or 5% of the drive when no limit is recorded) are skipped and listed, never deleted. The Bin's current fill level plus everything recycled earlier in the run is counted too, so Windows never has to purge older Bin items to make room. `FOF_WANTNUKEWARNING` is set as a backstop.
 - **Restore point** is offered (admin only) before cleaning; Windows' result is verified by listing restore points. If none is created, the user is warned and chooses to continue or cancel.
 - **Uninstallers**: only the program's interactive `UninstallString` is launched, never `QuietUninstallString`; programs with only a silent uninstaller can't be ticked.
+- **Bulk ticking** (2026-11-15): each results tab has separate "Tick all" boxes for Safe and Review (all / some / none), plus "Untick all". Risky items are always ticked one at a time (`SelectionPolicy.AllowsBulkTick`). Programs are included: "Tick all Review" in Unused programs queues each program's own interactive uninstaller. Every row still goes through `SelectableItem.TrySetSelected`.
 
 Calls made during the build:
 

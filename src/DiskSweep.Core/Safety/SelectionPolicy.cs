@@ -33,6 +33,12 @@ public static class SelectionPolicy
 
         return new SelectionDecision(true, item.Risk == RiskLevel.Safe, null);
     }
+
+    /// <summary>
+    /// Whether a whole risk level may be ticked with one click. Risky items are always ticked one at a time,
+    /// after a look. Each row still goes through <see cref="SelectableItem.TrySetSelected"/>.
+    /// </summary>
+    public static bool AllowsBulkTick(RiskLevel risk) => risk is RiskLevel.Safe or RiskLevel.Review;
 }
 
 /// <summary>

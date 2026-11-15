@@ -198,7 +198,7 @@ public sealed partial class MainViewModel : ObservableObject
         {
             var items = _allItems.Where(i => i.Item.Category == category)
                 .OrderBy(i => i.Risk).ThenByDescending(i => i.Bytes);
-            Tabs.Add(new ResultTabViewModel(category, items));
+            Tabs.Add(new ResultTabViewModel(category, items, Batch));
         }
         Tabs.Add(new SkippedTabViewModel(result.Skipped, result.SkippedTotal));
         SelectedTab = Tabs.FirstOrDefault();
@@ -224,6 +224,21 @@ public sealed partial class MainViewModel : ObservableObject
         if (!_bulkUpdating) UpdateSelectionText();
     }
 
+    /// <summary>Runs a change to many rows' ticks, then refreshes the totals once.</summary>
+    private void Batch(Action change)
+    {
+        _bulkUpdating = true;
+        try
+        {
+            change();
+        }
+        finally
+        {
+            _bulkUpdating = false;
+        }
+        UpdateSelectionText();
+    }
+
     private void UpdateSelectionText()
     {
         var selected = _allItems.Where(i => i.IsSelected).ToList();
@@ -232,6 +247,7 @@ public sealed partial class MainViewModel : ObservableObject
             ? "Nothing selected"
             : $"{selected.Count:N0} selected, {PathUtil.FormatBytes(bytes)}";
         CleanCommand.NotifyCanExecuteChanged();
+        foreach (var tab in Tabs.OfType<ResultTabViewModel>()) tab.RefreshTicks();
     }
 
     [RelayCommand]

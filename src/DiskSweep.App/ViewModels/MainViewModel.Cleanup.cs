@@ -129,8 +129,7 @@ public sealed partial class MainViewModel
         var gone = new HashSet<ScanItemViewModel>();
         var notDone = new List<SkippedEntry>();
 
-        _bulkUpdating = true;
-        try
+        Batch(() =>
         {
             foreach (var outcome in outcomes)
             {
@@ -144,11 +143,7 @@ public sealed partial class MainViewModel
                 string what = outcome.Item.Kind == ItemKind.Program ? "uninstalled" : "cleaned";
                 notDone.Add(new SkippedEntry(outcome.Item.Kind == ItemKind.Program ? vm.Name : outcome.Item.Path, $"Not {what}: {outcome.Detail}"));
             }
-        }
-        finally
-        {
-            _bulkUpdating = false;
-        }
+        });
 
         if (notDone.Count > 0) notes.Add($"{notDone.Count:N0} item(s) weren't cleaned. The Skipped tab says why.");
 
