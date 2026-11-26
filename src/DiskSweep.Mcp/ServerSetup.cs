@@ -17,8 +17,11 @@ public static class ServerSetup
     {
         services.AddSingleton(env);
         services.AddSingleton<SweepSession>();
+        services.AddSingleton<PlanStore>();
+        services.AddSingleton<CleanupPlanner>();
         return services
             .AddMcpServer(o => o.ServerInfo = new() { Name = "disksweep", Version = "0.1.0" })
-            .WithTools<ScanTools>();
+            .WithTools<ScanTools>()
+            .WithTools<CleanupTools>();
     }
 }
