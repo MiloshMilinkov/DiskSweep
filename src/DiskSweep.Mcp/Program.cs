@@ -18,12 +18,6 @@ builder.Logging.ClearProviders();
 builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
 
 using var log = new ActionLog(Path.Combine(AppPaths.LogDirectory, "mcp"));
-builder.Services.AddDiskSweep(SweepEnvironment.ForThisPc(log, new DeclineAll())).WithStdioServerTransport();
+builder.Services.AddDiskSweep(SweepEnvironment.ForThisPc(log, new WindowsApprovalPrompt())).WithStdioServerTransport();
 
 await builder.Build().RunAsync();
-
-/// <summary>Placeholder until the Windows approval dialog exists: declines every plan.</summary>
-internal sealed class DeclineAll : IApprovalPrompt
-{
-    public bool Confirm(ApprovalRequest request) => false;
-}
