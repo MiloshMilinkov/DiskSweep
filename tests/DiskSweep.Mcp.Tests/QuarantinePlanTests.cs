@@ -101,6 +101,18 @@ public sealed class QuarantinePlanTests : IDisposable
     }
 
     [Fact]
+    public async Task Already_cancelled_call_shows_no_dialog()
+    {
+        var (planId, a, _) = await PlanTwoFilesAsync();
+
+        var result = Executor.Execute(planId, "test-client", new CancellationToken(canceled: true));
+
+        Assert.False(result.Approved);
+        Assert.Empty(_bed.Approval.Shown);
+        Assert.True(File.Exists(a.Path));
+    }
+
+    [Fact]
     public async Task Forged_blank_and_foreign_plan_ids_are_refused()
     {
         var (_, a, _) = await PlanTwoFilesAsync();

@@ -196,7 +196,7 @@ public sealed class ProposeCleanupTests : IDisposable
         var file = _bed.AddFile("a.tmp");
         await _bed.ScanAsync();
 
-        Assert.Contains("Unknown item id", Assert.Single(Planner.Propose(["nope"]).Refused).Reason);
+        Assert.Contains("Unknown item id", Assert.Single(Planner.Propose(["nope", "nope", " nope "]).Refused).Reason);
 
         _bed.Clock.Advance(TimeSpan.FromMinutes(61));
         var r = Planner.Propose([_bed.Id(file)]);

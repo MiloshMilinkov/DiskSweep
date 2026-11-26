@@ -40,7 +40,7 @@ public sealed class CleanupPlanner(SweepSession session, PlanStore plans)
             token.ThrowIfCancellationRequested();
             if (!session.TryGetItem(id, out var found, out string error))
             {
-                refused.Add(new(id, null, error));
+                if (seen.Add((id ?? "").Trim())) refused.Add(new(id ?? "", null, error));
                 continue;
             }
             if (!seen.Add(found.Id)) continue;

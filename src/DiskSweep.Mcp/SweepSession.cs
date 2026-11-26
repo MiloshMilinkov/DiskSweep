@@ -156,7 +156,7 @@ public sealed class SweepSession(SweepEnvironment env)
 
     /// <summary>The safety layer's form of a path (full, long names, no trailing separator), for comparing paths.</summary>
     internal static string Normalized(string path) =>
-        PathNormalizer.TryNormalize(path, out string p, out _) ? p : PathUtil.NormalizeLoose(path) ?? path;
+        PathNormalizer.TryNormalize(path, out string p, out _) ? p : (path ?? "").Trim();
 
     /// <summary>Parses an enum name (any case), optionally limited to <paramref name="allowed"/>; null for an empty value.</summary>
     internal static T? ParseEnum<T>(string? value, string what, IReadOnlyCollection<T>? allowed = null) where T : struct, Enum

@@ -340,3 +340,55 @@ Descriptions (exact):
 - [ ] **Step 2:** Run the `code-review` skill at `medium` effort (this code moves files). Fix the confirmed findings, then re-run the build and tests.
 - [ ] **Step 3:** Append `## Review` to this plan: the findings, what was fixed, what was skipped and why, and the final test count and build warnings.
 - [ ] **Step 4:** Commit: `chore(mcp): review fixes`, including the plan's Review section. Ask the owner before pushing or opening a PR.
+
+## Review
+
+Executed inline (Native). Every task followed red-green TDD, and every task committed with the suite green.
+
+**Calls made during the build** (all recorded in the ledger):
+- `IApprovalPrompt` was created in Task 2, because `SweepEnvironment` needs it.
+- The server wiring was extracted early as `ServerSetup.AddDiskSweep`.
+- Path comparisons go through `PathNormalizer`, because `%TEMP%` here is an 8.3 short path.
+- Overlap is refused in both directions.
+- Once a cap is hit, the remaining ids are refused too.
+- The dialog flattens the client's self-reported name to one short line.
+- `NoForbiddenApisTests` also bans any `Delete` member reference.
+
+**simplify** (4 reviewers: reuse, simplification, efficiency, altitude):
+- Found one real bug. Different spellings of one id ("3-17", "3-017"), or two scan items with the same path, could enter a plan twice. That inflated the total, and the executor threw after the user clicked Yes (nothing moved, but the plan was used up).
+  - Fixed: dedup by canonical id, and equal paths count as overlap.
+  - Tests: `Different_spellings_of_one_id_count_once` and `Two_scan_items_with_the_same_path_count_once`, red then green.
+- Cleanups applied:
+  - item paths normalized once per scan
+  - `ItemRef` with canonical ids
+  - `StaleReason` and shared texts instead of copies
+  - `explain_item`'s "can be planned" uses the same plan rule as `propose_cleanup`
+  - the item cap is checked before the pre-move walk
+  - `propose_cleanup` honours cancellation
+  - the executor pairs outcomes by order
+  - listing quarantine no longer queries every drive's label and free space
+  - shared test-bed setup
+- Skipped, because they are outside this diff or not worth a new API:
+  - normalizing `ScanItem.Path` in Core
+  - `Preflight` returning the failed stage
+  - a quarantine-listing helper shared with the app (the wording was aligned instead)
+  - folder scope inside `ScanEngine`
+  - loading only the needed journal on restore
+
+**code-review (medium):** 4 findings, all nits.
+- Fixed:
+  - A call the client had already cancelled still showed the dialog. Test: `Already_cancelled_call_shows_no_dialog`.
+  - The path fallback expanded `%VARIABLES%`.
+  - A repeated unknown id was refused several times.
+- Skipped: closed plan ids are kept for the server's lifetime. That is a few bytes per proposal, so it is bounded in practice.
+
+**Result:**
+- `dotnet build`: 0 warnings.
+- `dotnet test`: 211 Core + 53 MCP tests pass.
+- Smoke run with the published exe over stdio, on the real C: drive, read-only tools only:
+  - 7 tools listed
+  - a scan of 322 items in 14 s
+  - 8 of 8 checks pass on a Safe item
+  - a forged plan id comes back as a tool error, with no dialog
+  - stdout held only JSON-RPC
+- The approval dialog itself has not been clicked through on the real PC. Tests use a fake.

@@ -27,6 +27,9 @@ public sealed class PlanExecutor(SweepEnvironment env, PlanStore plans)
     {
         if (!plans.TryTake(planId, out var plan, out string refusal)) throw new McpException(refusal);
 
+        if (token.IsCancellationRequested)
+            return new QuarantineRunResult(false, "The request was cancelled. Nothing moved.", [], [], 0, PathUtil.FormatBytes(0));
+
         env.Log.Info($"MCP: asking the user to approve plan {plan.Id} ({plan.Entries.Count} item(s)) for \"{clientName}\".");
         bool approved = env.Approval.Confirm(new ApprovalRequest(clientName, plan.Entries.Count, plan.TotalBytes,
             plan.Entries.Select(e => e.Item.Path).ToList()));
