@@ -67,3 +67,7 @@ No lint step beyond compiler warnings (keep them at 0). No deploy yet.
 - DataGrid columns aren't in the visual tree: bind their `Visibility` through the `BindingProxy` resource.
 - Last-access times on .exe files are often refreshed by antivirus scans, so they only ever make programs look *more* used (safe direction).
 - The app can be driven for checks with UI Automation (button names = their text, e.g. "Scan C:") and screenshotted with `PrintWindow`. Results-tab content is reachable only because the TabControl template names its presenter `PART_SelectedContentHost` (row boxes are "Select item", plus "Tick all Safe items", "Tick all Review items", "Untick all"). WPF ignores posted mouse messages, so use UIA patterns, not `PostMessage` clicks. Call `SetThreadDpiAwarenessContext(-4)` before `PrintWindow`, or the shot is cropped at display scaling above 100%.
+
+## CI
+
+`.github/workflows/ci.yml` calls the shared `dotnet-ci.yml` in `MiloshMilinkov/.github` (Windows runner, SDK from `global.json`): restore, build, test, plus a gitleaks scan. Check runs with `gh run list -L 3`.
