@@ -20,9 +20,11 @@ public static class ServerSetup
         services.AddSingleton<PlanStore>();
         services.AddSingleton<CleanupPlanner>();
         services.AddSingleton<PlanExecutor>();
+        services.AddSingleton<QuarantineBrowser>();
         return services
             .AddMcpServer(o => o.ServerInfo = new() { Name = "disksweep", Version = "0.1.0" })
             .WithTools<ScanTools>()
-            .WithTools<CleanupTools>();
+            .WithTools<CleanupTools>()
+            .WithTools<QuarantineTools>();
     }
 }
