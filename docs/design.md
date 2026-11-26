@@ -54,6 +54,33 @@ Calls made during the build:
 - The uninstall command is re-read from the registry right before launch and must match the scan. Unquoted paths use the longest existing `.exe` prefix; bare names (msiexec.exe) resolve only in System32. Uninstallers run one at a time; afterwards the registry entry is checked to report whether the program is gone.
 - Items that weren't cleaned are unticked and listed at the top of the Skipped tab with the reason.
 
+## MCP server (2026-11-26)
+
+`src/DiskSweep.Mcp` is a stdio MCP server that lets Claude Code or Claude Desktop inspect clutter and propose cleanups. It is a side feature outside the phase plan. Spec: `docs/superpowers/specs/2026-11-26-mcp-server-design.md`. Plan and review: `docs/superpowers/plans/2026-11-26-mcp-server.md`.
+
+It is designed for an agent that can be wrong, can be prompt-injected by names in scan results, and can run in a client that auto-approves tool calls. So every limit is enforced in server code.
+
+Made with the owner:
+
+- **A person approves every move in a Windows dialog** the server shows itself. Default button No; only Yes moves anything; a dialog that can't be shown counts as No. Chosen over MCP elicitation, whose client support is uneven and which would fail closed in Claude Desktop, and over the client's own permission prompt, which auto-approve bypasses.
+- **Plan caps: 100 items and 10 GB.** Once a cap is reached, the remaining ids are refused with the reason.
+- **Restore needs no dialog.** It undoes a move the person already approved, and `QuarantineRestorer` never overwrites.
+
+Calls made during the build:
+
+- **Reuse, don't duplicate.** Write tools take only ids the server issued: item ids from the latest scan, plan ids (random 128-bit, in memory only), and quarantine ids. No tool acts on a typed path.
+  - A plan may hold Safe and Review files and folders only.
+  - Every item goes through Core's new `CleanupService.Preflight`: the same pre-move checks, without moving.
+  - Moves run through `CleanupService.Run(…, Quarantine)`, built with a Recycle Bin that refuses everything.
+- **Stricter than the brief:**
+  - Items from a scan older than 60 minutes can't be planned.
+  - A plan is used up by its first `quarantine_plan` call, even when the person clicks No.
+  - A plan never holds a folder together with something inside it.
+- **Plan timing.** A plan that expires, or whose call is cancelled while the dialog is open, moves nothing.
+- **The dialog shows the client's self-reported name**, flattened to one short line so it can't add misleading text.
+- **Folder scans** scan the whole drive and keep the items under the folder, so the scanners stay unchanged (about 15 s on C:).
+- **`NoForbiddenApisTests`** reads the compiled MCP assembly. It fails on any reference to `UninstallLauncher`, `RestorePoint`, `WindowsRecycleBin`, `Microsoft.Win32` (registry), `SendToRecycleBin` or any `Delete` member.
+
 ## Architecture
 
 ```
@@ -64,9 +91,11 @@ src/DiskSweep.Core      engine, no UI code
   Scanning/             ScanEngine + one IScanner per category
   Cleanup/              CleanupService, QuarantineStore/Restorer, WindowsRecycleBin, RestorePoint, UninstallLauncher
 src/DiskSweep.App       WPF + CommunityToolkit.Mvvm
+src/DiskSweep.Mcp       stdio MCP server: Tools/ → SweepSession, Plans/ (planner, store, executor), QuarantineBrowser
 tests/DiskSweep.Core.Tests
+tests/DiskSweep.Mcp.Tests
 ```
 
 Every path a user could tick goes through `SelectableItem.TrySetSelected`, which re-runs `SelectionPolicy.Evaluate` → `SafetyGuard.Check` at the moment of the tick. `CleanupService` runs the same checks again immediately before each move and re-walks folders for reparse points.
 
-The registry is only ever opened read-only (`RegistryReader`). Disk writes are limited to the log in `%LOCALAPPDATA%\DiskSweep\logs`, the quarantine folders, and the moves the user confirms.
+The registry is only ever opened read-only (`RegistryReader`). Disk writes are limited to the log in `%LOCALAPPDATA%\DiskSweep\logs` (the MCP server logs to its `mcp` sub-folder), the quarantine folders, and the moves the user confirms.

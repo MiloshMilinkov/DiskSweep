@@ -19,6 +19,12 @@ public enum CleanupStatus { Moved, Skipped, Failed }
 
 public sealed record CleanupOutcome(ScanItem Item, CleanupStatus Status, string Detail, long Bytes = 0);
 
+/// <summary>What the pre-move check says about one item: why it must stay put (or null), and its size right now.</summary>
+public readonly record struct PreflightResult(string? Refusal, long SizeBytes)
+{
+    public bool CanMove => Refusal is null;
+}
+
 public sealed class CleanupReport
 {
     public required CleanupDestination Destination { get; init; }
@@ -92,6 +98,24 @@ public sealed class CleanupService
                   $"{report.NotMoved.Count()} not moved{(cancelled ? ", stopped by the user" : "")}.");
         _log.Flush();
         return report;
+    }
+
+    /// <summary>
+    /// Runs every check that happens right before a move, without moving anything, so a caller can show the
+    /// same refusals the move would give. Never throws.
+    /// </summary>
+    public PreflightResult Preflight(ScanItem item)
+    {
+        try
+        {
+            string? why = CheckBeforeMove(item, out _, out long size);
+            return new PreflightResult(why, why is null ? size : 0);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _log.Error($"Pre-move check of {item.Path} failed unexpectedly", ex);
+            return new PreflightResult($"Unexpected error while checking it: {ex.Message}", 0);
+        }
     }
 
     /// <summary>One item; never throws, so a single odd item can't stop the rest of the run or lose its results.</summary>

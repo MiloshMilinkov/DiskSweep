@@ -172,6 +172,50 @@ public class CleanupTests : IDisposable
     }
 
     [Fact]
+    public void Preflight_allows_an_unchanged_file_and_moves_nothing()
+    {
+        string file = _tree.File("keep.log", "hello");
+        TempTree.Age(file, 30);
+
+        var result = Service().Preflight(FileItem(file));
+
+        Assert.True(result.CanMove, result.Refusal);
+        Assert.Equal(5, result.SizeBytes);
+        Assert.True(File.Exists(file));
+        Assert.False(Directory.Exists(QuarantineRoot));
+    }
+
+    [Fact]
+    public void Preflight_refuses_a_file_changed_since_the_scan()
+    {
+        string file = _tree.File("log.txt", "one");
+        TempTree.Age(file, 30);
+        var item = FileItem(file);
+        File.WriteAllText(file, "two, longer");
+
+        var result = Service().Preflight(item);
+
+        Assert.False(result.CanMove);
+        Assert.Contains("changed since the scan", result.Refusal);
+        Assert.True(File.Exists(file));
+    }
+
+    [Fact]
+    public void Preflight_refuses_a_folder_that_gained_a_junction()
+    {
+        string folder = _tree.Dir("leftover");
+        _tree.File(@"leftover\a.txt", "x");
+        var item = FolderItem(folder, baseline: DateTime.UtcNow.AddYears(1));
+        _tree.Junction(@"leftover\link", _tree.Dir("target"));
+
+        var result = Service().Preflight(item);
+
+        Assert.False(result.CanMove);
+        Assert.Contains("junction", result.Refusal, StringComparison.OrdinalIgnoreCase);
+        Assert.True(Directory.Exists(folder));
+    }
+
+    [Fact]
     public void Items_that_changed_since_the_scan_are_skipped()
     {
         string file = _tree.File("log.txt", "one");

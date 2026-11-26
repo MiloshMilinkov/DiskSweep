@@ -9,10 +9,15 @@ Proprietary (all rights reserved). Design decisions and phase status: `docs/desi
 
 ```bash
 dotnet build                                  # whole solution (SDK 8 pinned by global.json)
-dotnet test                                   # xUnit, tests/DiskSweep.Core.Tests
+dotnet test                                   # xUnit: tests/DiskSweep.Core.Tests and tests/DiskSweep.Mcp.Tests
 dotnet run --project src/DiskSweep.App        # launch the app
 dotnet test --filter "FullyQualifiedName~SafetyGuard"   # just the safety rules
+dotnet test tests/DiskSweep.Mcp.Tests          # just the MCP server
+dotnet publish src/DiskSweep.Mcp -c Release -o publish/DiskSweep.Mcp   # MCP server exe for clients
+claude mcp add --scope user disksweep -- "<repo>\publish\DiskSweep.Mcp\DiskSweep.Mcp.exe"
 ```
+
+MCP evals are run by hand: `evals/README.md`.
 
 No lint step beyond compiler warnings (keep them at 0). No deploy yet.
 
@@ -25,7 +30,9 @@ No lint step beyond compiler warnings (keep them at 0). No deploy yet.
   - `Scanning/` — `ScanEngine` plus one `IScanner` per category.
   - `Cleanup/` — `CleanupService` (re-checks every item right before it moves), `QuarantineStore`/`QuarantineRestorer`, `WindowsRecycleBin` + `RecycleBinPolicy`, `RestorePoint` (WMI), `UninstallLauncher`.
 - `src/DiskSweep.App` — WPF UI (`MainWindow.xaml`, `ViewModels/`, `Themes/Theme.xaml`).
+- `src/DiskSweep.Mcp` — stdio MCP server (ModelContextProtocol SDK 2.4). Thin `Tools/` over `SweepSession` (scans, ids), `Plans/` (`CleanupPlanner`, `PlanStore`, `PlanExecutor`), `QuarantineBrowser`. Everything machine-facing is in `SweepEnvironment`.
 - `tests/DiskSweep.Core.Tests` — safety-layer tests (synthetic drive `Q:` via `TestLayouts`, real junctions via `TempTree`) and scanner tests.
+- `tests/DiskSweep.Mcp.Tests` — tool and guardrail tests on `McpTestBed` (links `TempTree`/`TestLayouts`), the protocol test, and `NoForbiddenApisTests`.
 
 ## Rules
 
@@ -40,10 +47,22 @@ No lint step beyond compiler warnings (keep them at 0). No deploy yet.
 - New protections go in `SafetyGuard` with a test in `SafetyGuardTests`; never weaken an existing rule without the owner's OK.
 - Runs as `asInvoker`; admin is optional ("Restart as administrator").
 
+## MCP server rules
+
+- No scanning, safety or move logic in `DiskSweep.Mcp`: reuse Core (`ScanEngine`, `SafetyGuard`, `CleanupService.Preflight`/`Run`, `QuarantineStore`/`QuarantineRestorer`).
+- Write tools take only ids the server issued (item ids of the latest scan, plan ids, quarantine ids), never paths.
+- Plans: Safe/Review files and folders only (`PlanItemRule`), at most 100 items / 10 GB, expire after 10 min, single use, scans older than 60 min refused.
+- `quarantine_plan` moves only after a person clicks Yes in `WindowsApprovalPrompt` (default No). Destination is always quarantine; every `CleanupService`/`QuarantineRestorer` gets `RefusingRecycleBin`.
+- No uninstallers, restore points, registry or deletes: `NoForbiddenApisTests` reads the compiled assembly and must stay green.
+- Every tool description ends with a `Can't:` sentence; limits are enforced in code, never only in descriptions.
+- Tests use `McpTestBed`/`FakeApproval`: never show a dialog, scan a real drive or touch real quarantine.
+
 ## Gotchas
 
 - `global.json` pins SDK 8.0.4xx; the machine also has SDK 10.
-- Close any running DiskSweep before `dotnet build`, or copying `DiskSweep.Core.dll` fails (MSB3027 file lock).
+- Close any running DiskSweep before `dotnet build`, or copying `DiskSweep.Core.dll` fails (MSB3027 file lock). A client running the MCP server locks `publish\DiskSweep.Mcp`: close it (or `/mcp` → disable) before republishing.
+- `%TEMP%` here is an 8.3 short path (`C:\Users\OPTIMU~1\…`); compare paths through `PathNormalizer`/`SweepSession.Normalized`, never raw strings.
+- The MCP server writes only JSON-RPC to stdout; logs go to stderr and `%LOCALAPPDATA%\DiskSweep\logs\mcp\`. Smoke-test it by piping JSON-RPC lines into the published exe.
 - XAML `Style.Triggers` must come after all `Setter`s or the build fails with MC3088.
 - DataGrid columns aren't in the visual tree: bind their `Visibility` through the `BindingProxy` resource.
 - Last-access times on .exe files are often refreshed by antivirus scans, so they only ever make programs look *more* used (safe direction).
