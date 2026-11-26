@@ -5,6 +5,7 @@
  * without written permission is prohibited. See the LICENSE file.
  */
 
+using System.Diagnostics.CodeAnalysis;
 using DiskSweep.Core.IO;
 using DiskSweep.Core.Models;
 using DiskSweep.Core.Safety;
@@ -15,10 +16,24 @@ namespace DiskSweep.Mcp;
 
 /// <summary>One finished scan. <see cref="Items"/> holds only what is in scope; an item's id is its index there.</summary>
 /// <param name="Folder">The folder the scan was narrowed to, or null for the whole drive.</param>
-public sealed record ScanSnapshot(int Number, ScanResult Result, string Target, string? Folder, DateTimeOffset FinishedAt,
-    IReadOnlyList<ScanItem> Items)
+/// <param name="Paths">Each item's path in the safety layer's form (see <see cref="SweepSession.Normalized"/>), worked out once.</param>
+public sealed record ScanSnapshot(int Number, ScanResult Result, string? Folder, DateTimeOffset FinishedAt,
+    IReadOnlyList<ScanItem> Items, IReadOnlyList<string> Paths)
 {
+    public string Target => Folder ?? Result.Request.Drive.RootPath;
     public string IdOf(int index) => $"{Number}-{index}";
+    public bool IsUnder(int index, string folder) => PathUtil.IsSameOrUnder(Paths[index], folder);
+}
+
+/// <summary>An item of the latest scan, found by its id.</summary>
+public sealed record ItemRef(ScanSnapshot Scan, int Index)
+{
+    public ScanItem Item => Scan.Items[Index];
+
+    /// <summary>The canonical id, however the caller spelled it ("3-017" and " 3-17" both become "3-17").</summary>
+    public string Id => Scan.IdOf(Index);
+
+    public string Path => Scan.Paths[Index];
 }
 
 /// <summary>
@@ -31,7 +46,6 @@ public sealed class SweepSession(SweepEnvironment env)
     private readonly object _gate = new();
     private readonly Dictionary<string, (string BatchFolder, int Slot)> _quarantineIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<(string, int), string> _quarantineIdsByEntry = [];
-    private int _scanCount;
     private ScanSnapshot? _latest;
 
     public SweepEnvironment Env { get; } = env;
@@ -42,7 +56,8 @@ public sealed class SweepSession(SweepEnvironment env)
         IProgress<ProgressNotificationValue>? progress, CancellationToken token)
     {
         var (drive, folder) = ResolveTarget(target);
-        var selected = ParseCategories(categories);
+        var selected = (categories ?? []).Select(c => ParseEnum(c, "category", ScanCategoryInfo.Selectable)).OfType<ScanCategory>().ToHashSet();
+        if (selected.Count == 0) selected = [.. ScanCategoryInfo.Selectable];
         if (!_scanGate.Wait(0)) throw new McpException("A scan is already running. Wait for it to finish.");
         try
         {
@@ -58,9 +73,18 @@ public sealed class SweepSession(SweepEnvironment env)
             }
             var result = await scan;
 
-            var items = folder is null ? result.Items : result.Items.Where(i => PathUtil.IsSameOrUnder(Normalized(i.Path), folder)).ToList();
-            var snapshot = new ScanSnapshot(Interlocked.Increment(ref _scanCount), result, folder ?? drive.RootPath, folder,
-                Env.Clock.GetUtcNow(), items);
+            var items = new List<ScanItem>(result.Items.Count);
+            var paths = new List<string>(result.Items.Count);
+            foreach (var item in result.Items)
+            {
+                string path = Normalized(item.Path);
+                if (folder is not null && !PathUtil.IsSameOrUnder(path, folder)) continue;
+                items.Add(item);
+                paths.Add(path);
+            }
+
+            // Scans run one at a time (the gate above), so the next number can't be taken twice.
+            var snapshot = new ScanSnapshot((Latest?.Number ?? 0) + 1, result, folder, Env.Clock.GetUtcNow(), items, paths);
             Volatile.Write(ref _latest, snapshot);
             Env.Log.Info($"MCP: scan {snapshot.Number} of {snapshot.Target}: {items.Count} item(s).");
             return snapshot;
@@ -72,41 +96,39 @@ public sealed class SweepSession(SweepEnvironment env)
     }
 
     /// <summary>Finds an item of the latest scan by its id.</summary>
-    public bool TryGetItem(string id, out ScanSnapshot scan, out ScanItem item, out string error)
+    public bool TryGetItem(string id, [NotNullWhen(true)] out ItemRef? found, out string error)
     {
-        scan = null!;
-        item = null!;
+        found = null;
         error = "";
         if (Latest is not { } latest)
         {
-            error = "No scan yet. Call scan first.";
+            error = Texts.NoScan;
             return false;
         }
 
         string[] parts = (id ?? "").Trim().Split('-');
-        if (parts.Length != 2 || !int.TryParse(parts[0], out int number) || !int.TryParse(parts[1], out int index))
+        if (parts.Length == 2 && int.TryParse(parts[0], out int number) && int.TryParse(parts[1], out int index))
         {
-            error = $"Unknown item id \"{id}\". Use ids from list_candidates.";
-            return false;
+            if (number != latest.Number)
+            {
+                error = $"Item id \"{id}\" is from an older scan; use ids from the latest scan.";
+                return false;
+            }
+            if (index >= 0 && index < latest.Items.Count)
+            {
+                found = new ItemRef(latest, index);
+                return true;
+            }
         }
-        if (number != latest.Number)
-        {
-            error = $"Item id \"{id}\" is from an older scan; use ids from the latest scan.";
-            return false;
-        }
-        if (index < 0 || index >= latest.Items.Count)
-        {
-            error = $"Unknown item id \"{id}\". Use ids from list_candidates.";
-            return false;
-        }
-
-        scan = latest;
-        item = latest.Items[index];
-        return true;
+        error = $"Unknown item id \"{id}\". Use ids from list_candidates.";
+        return false;
     }
 
-    /// <summary>True when items from <paramref name="scan"/> may no longer be planned.</summary>
-    public bool IsStale(ScanSnapshot scan) => Env.Clock.GetUtcNow() - scan.FinishedAt > Env.Limits.MaxScanAge;
+    /// <summary>Why items from <paramref name="scan"/> may no longer be planned, or null while it is fresh.</summary>
+    public string? StaleReason(ScanSnapshot scan) =>
+        Env.Clock.GetUtcNow() - scan.FinishedAt > Env.Limits.MaxScanAge
+            ? $"The scan is older than {Env.Limits.MaxScanAge.TotalMinutes:0} minutes. Scan again."
+            : null;
 
     /// <summary>A stable id for a quarantine entry within this session ("q1", "q2"…).</summary>
     internal string QuarantineIdFor(string batchFolder, int slot)
@@ -136,6 +158,15 @@ public sealed class SweepSession(SweepEnvironment env)
     internal static string Normalized(string path) =>
         PathNormalizer.TryNormalize(path, out string p, out _) ? p : PathUtil.NormalizeLoose(path) ?? path;
 
+    /// <summary>Parses an enum name (any case), optionally limited to <paramref name="allowed"/>; null for an empty value.</summary>
+    internal static T? ParseEnum<T>(string? value, string what, IReadOnlyCollection<T>? allowed = null) where T : struct, Enum
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var valid = allowed ?? Enum.GetValues<T>();
+        if (Enum.TryParse(value.Trim(), ignoreCase: true, out T parsed) && valid.Contains(parsed)) return parsed;
+        throw new McpException($"Unknown {what} \"{value}\". Use any of: {string.Join(", ", valid)}.");
+    }
+
     private (DriveSummary Drive, string? Folder) ResolveTarget(string target)
     {
         string t = (target ?? "").Trim().Replace('/', '\\');
@@ -162,19 +193,5 @@ public sealed class SweepSession(SweepEnvironment env)
         var drive = drives.FirstOrDefault(d => PathUtil.AreSame(d.RootPath, root))
             ?? throw new McpException($"{root} isn't a local drive DiskSweep can scan. Available: {string.Join(", ", drives.Select(d => d.Letter))}.");
         return (drive, folder);
-    }
-
-    private static HashSet<ScanCategory> ParseCategories(IReadOnlyList<string>? names)
-    {
-        if (names is null || names.Count == 0) return [.. ScanCategoryInfo.Selectable];
-
-        var selected = new HashSet<ScanCategory>();
-        foreach (string name in names)
-        {
-            if (!Enum.TryParse(name?.Trim(), ignoreCase: true, out ScanCategory c) || !ScanCategoryInfo.Selectable.Contains(c))
-                throw new McpException($"Unknown category \"{name}\". Use any of: {string.Join(", ", ScanCategoryInfo.Selectable)}.");
-            selected.Add(c);
-        }
-        return selected;
     }
 }

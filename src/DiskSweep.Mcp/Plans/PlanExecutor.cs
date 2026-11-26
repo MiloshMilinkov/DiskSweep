@@ -38,7 +38,7 @@ public sealed class PlanExecutor(SweepEnvironment env, PlanStore plans)
         if (stop is not null)
         {
             env.Log.Info($"MCP: plan {plan.Id} not carried out: {stop}");
-            return new QuarantineRunResult(false, stop, [], [], 0, CandidateItem.SizeText(0));
+            return new QuarantineRunResult(false, stop, [], [], 0, PathUtil.FormatBytes(0));
         }
 
         var notMoved = new List<Refusal>();
@@ -49,22 +49,22 @@ public sealed class PlanExecutor(SweepEnvironment env, PlanStore plans)
             else toMove.Add(entry);
         }
 
-        var byItem = toMove.ToDictionary(e => e.Item); // ScanItem is a class without Equals: keyed by reference
+        // Run reports one outcome per item, in the order given (stopped items included), so outcomes line up with toMove.
         var report = env.NewCleanupService(plan.Guard)
             .Run(toMove.Select(e => e.Item).ToList(), CleanupDestination.Quarantine, token: token);
 
         var moved = new List<MovedItem>();
-        foreach (var outcome in report.Outcomes)
+        foreach (var (entry, outcome) in toMove.Zip(report.Outcomes))
         {
-            var entry = byItem[outcome.Item];
             if (outcome.Status == CleanupStatus.Moved) moved.Add(new(entry.ItemId, outcome.Item.Path, outcome.Bytes, outcome.Detail));
             else notMoved.Add(new(entry.ItemId, outcome.Item.Path, outcome.Detail));
         }
 
-        string message = $"Moved {moved.Count} item(s), {PathUtil.FormatBytes(report.MovedBytes)}, to quarantine." +
+        string movedSize = PathUtil.FormatBytes(report.MovedBytes);
+        string message = $"Moved {moved.Count} item(s), {movedSize}, to quarantine." +
                          (notMoved.Count > 0 ? $" {notMoved.Count} item(s) stayed where they are; NotMoved says why." : "") +
                          " Use list_quarantine and restore_from_quarantine to put anything back.";
         env.Log.Info($"MCP: plan {plan.Id}: {message}");
-        return new QuarantineRunResult(true, message, moved, notMoved, report.MovedBytes, PathUtil.FormatBytes(report.MovedBytes));
+        return new QuarantineRunResult(true, message, moved, notMoved, report.MovedBytes, movedSize);
     }
 }

@@ -7,11 +7,9 @@ namespace DiskSweep.Mcp.Tests;
 public sealed class QuarantineToolsTests : IDisposable
 {
     private readonly McpTestBed _bed = new();
-    private PlanStore? _plans;
 
     public void Dispose() => _bed.Dispose();
 
-    private PlanStore Plans => _plans ??= new PlanStore(_bed.Session.Env);
     private QuarantineBrowser Browser => new(_bed.Session);
 
     private async Task<(ScanItem A, ScanItem B)> QuarantineTwoFilesAsync()
@@ -19,8 +17,8 @@ public sealed class QuarantineToolsTests : IDisposable
         var a = _bed.AddFile("a.tmp", content: "aa");
         var b = _bed.AddFile(@"sub\b.tmp", content: "bbb");
         await _bed.ScanAsync();
-        string planId = new CleanupPlanner(_bed.Session, Plans).Propose([_bed.Id(a), _bed.Id(b)]).PlanId!;
-        Assert.True(new PlanExecutor(_bed.Session.Env, Plans).Execute(planId, "test-client", CancellationToken.None).Approved);
+        string planId = _bed.Planner.Propose([_bed.Id(a), _bed.Id(b)]).PlanId!;
+        Assert.True(_bed.Executor.Execute(planId, "test-client", CancellationToken.None).Approved);
         return (a, b);
     }
 

@@ -159,7 +159,7 @@ public sealed class ScanToolsTests : IDisposable
     [Fact]
     public async Task Ids_from_an_older_scan_or_made_up_are_rejected()
     {
-        Assert.False(_bed.Session.TryGetItem("1-0", out _, out _, out string before));
+        Assert.False(_bed.Session.TryGetItem("1-0", out _, out string before));
         Assert.Contains("scan", before);
 
         _bed.AddFile("a.tmp");
@@ -167,11 +167,11 @@ public sealed class ScanToolsTests : IDisposable
         string oldId = first.IdOf(0);
         await _bed.ScanAsync();
 
-        Assert.False(_bed.Session.TryGetItem(oldId, out _, out _, out string old));
+        Assert.False(_bed.Session.TryGetItem(oldId, out _, out string old));
         Assert.Contains("older scan", old);
-        Assert.False(_bed.Session.TryGetItem("zzz", out _, out _, out string unknown));
+        Assert.False(_bed.Session.TryGetItem("zzz", out _, out string unknown));
         Assert.Contains("Unknown item id", unknown);
-        Assert.False(_bed.Session.TryGetItem("2-99", out _, out _, out _));
+        Assert.False(_bed.Session.TryGetItem("2-99", out _, out _));
         Assert.Throws<McpException>(() => Tools.ExplainItem(oldId));
     }
 

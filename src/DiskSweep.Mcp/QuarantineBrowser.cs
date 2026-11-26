@@ -65,7 +65,7 @@ public sealed class QuarantineBrowser(SweepSession session)
     {
         bool inQuarantine = QuarantineRestorer.IsInQuarantine(batch, e);
         string state = e.State == QuarantineState.Quarantined ? "In quarantine"
-            : inQuarantine ? "In quarantine (the move was interrupted)"
+            : inQuarantine ? "In quarantine (move was interrupted)"
             : "Interrupted before moving: still in its original place";
         return new QuarantineListing(session.QuarantineIdFor(batch.Folder, e.Slot), e.OriginalPath, e.IsDirectory, e.SizeBytes,
             PathUtil.FormatBytes(e.SizeBytes), e.QuarantinedUtc, state, inQuarantine);

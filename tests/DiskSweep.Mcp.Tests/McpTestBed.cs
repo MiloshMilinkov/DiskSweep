@@ -38,6 +38,7 @@ internal sealed class FakeApproval : IApprovalPrompt
 internal sealed class McpTestBed : IDisposable
 {
     private SweepSession? _session;
+    private PlanStore? _plans;
 
     public TempTree Tree { get; } = new();
     public ManualClock Clock { get; } = new(new DateTimeOffset(2026, 11, 26, 10, 0, 0, TimeSpan.Zero));
@@ -53,6 +54,14 @@ internal sealed class McpTestBed : IDisposable
     public string DriveRoot => PathUtil.DriveRoot(Tree.Root);
 
     public SweepSession Session => _session ??= new SweepSession(Env());
+
+    /// <summary>This session's plans (set <see cref="Limits"/> before first use).</summary>
+    public PlanStore Plans => _plans ??= new PlanStore(Session.Env);
+    public CleanupPlanner Planner => new(Session, Plans);
+    public PlanExecutor Executor => new(Session.Env, Plans);
+
+    /// <summary>The fake Q: PC's rules, with real file-system checks for paths in the test folder.</summary>
+    public SafetyGuard NewGuard() => new(TestLayouts.Synthetic(Exclusions), Win32FileAttributeProbe.Instance);
 
     public SweepEnvironment Env() => new()
     {
@@ -76,7 +85,7 @@ internal sealed class McpTestBed : IDisposable
         WasCancelled = false,
         Duration = TimeSpan.FromSeconds(1),
         Categories = ScanCategoryInfo.ResultCategories(request.Categories),
-        Guard = new SafetyGuard(TestLayouts.Synthetic(Exclusions), Win32FileAttributeProbe.Instance),
+        Guard = NewGuard(),
     };
 
     public ScanItem Add(ScanItem item)

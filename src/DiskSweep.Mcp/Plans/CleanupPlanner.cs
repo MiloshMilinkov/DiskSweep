@@ -23,74 +23,79 @@ public sealed record ProposalResult(string? PlanId, DateTimeOffset? ExpiresAtUtc
 /// </summary>
 public sealed class CleanupPlanner(SweepSession session, PlanStore plans)
 {
-    public ProposalResult Propose(IReadOnlyList<string> itemIds)
+    public ProposalResult Propose(IReadOnlyList<string> itemIds, CancellationToken token = default)
     {
         var limits = session.Env.Limits;
+        string capReason = $"Over the plan limit ({limits.MaxItems} items / {PathUtil.FormatBytes(limits.MaxBytes)}). Propose it in another plan.";
         var accepted = new List<(PlanEntry Entry, string Path)>();
         var refused = new List<Refusal>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<string>(); // canonical ids, so "3-17" and "3-017" count once
+        Core.Safety.SafetyGuard? planGuard = null;
         CleanupService? service = null;
-        Core.Safety.SafetyGuard? guard = null;
         long total = 0;
-        string? capReached = null;
+        bool capReached = false;
 
-        foreach (string raw in itemIds ?? [])
+        foreach (string id in itemIds ?? [])
         {
-            string id = (raw ?? "").Trim();
-            if (!seen.Add(id)) continue;
-
-            if (!session.TryGetItem(id, out var scan, out var item, out string error))
+            token.ThrowIfCancellationRequested();
+            if (!session.TryGetItem(id, out var found, out string error))
             {
                 refused.Add(new(id, null, error));
                 continue;
             }
-            string? why = session.IsStale(scan)
-                ? $"The scan is older than {limits.MaxScanAge.TotalMinutes:0} minutes. Scan again."
-                : PlanItemRule.WhyNot(item) ?? capReached;
-            string path = SweepSession.Normalized(item.Path);
-            why ??= Overlap(path, accepted);
-            if (why is null && scan.Result.Guard is null) why = "This scan has no safety guard. Scan again.";
+            if (!seen.Add(found.Id)) continue;
+
+            var item = found.Item;
+            var guard = found.Scan.Result.Guard;
+            capReached |= accepted.Count >= limits.MaxItems;
+            string? why = session.StaleReason(found.Scan)
+                ?? PlanItemRule.WhyNot(item)
+                ?? (capReached ? capReason : null)
+                ?? Overlap(found.Path, accepted)
+                ?? (guard is null ? Texts.NoGuard : null);
             if (why is not null)
             {
-                refused.Add(new(id, item.Path, why));
+                refused.Add(new(found.Id, item.Path, why));
                 continue;
             }
 
-            guard ??= scan.Result.Guard!;
-            service ??= session.Env.NewCleanupService(guard);
+            // TryGetItem only finds items of the latest scan, so one guard (and one service) serves the whole plan.
+            planGuard ??= guard!;
+            service ??= session.Env.NewCleanupService(planGuard);
             var preflight = service.Preflight(item);
             if (!preflight.CanMove)
             {
-                refused.Add(new(id, item.Path, preflight.Refusal!));
+                refused.Add(new(found.Id, item.Path, preflight.Refusal!));
                 continue;
             }
-            if (accepted.Count + 1 > limits.MaxItems || total + preflight.SizeBytes > limits.MaxBytes)
+            if (total + preflight.SizeBytes > limits.MaxBytes)
             {
-                capReached = $"Over the plan limit ({limits.MaxItems} items / {PathUtil.FormatBytes(limits.MaxBytes)}). Propose it in another plan.";
-                refused.Add(new(id, item.Path, capReached));
+                capReached = true;
+                refused.Add(new(found.Id, item.Path, capReason));
                 continue;
             }
 
-            accepted.Add((new PlanEntry(id, item, preflight.SizeBytes), path));
+            accepted.Add((new PlanEntry(found.Id, item, preflight.SizeBytes), found.Path));
             total += preflight.SizeBytes;
         }
 
         if (accepted.Count == 0)
-            return new ProposalResult(null, null, [], 0, CandidateItem.SizeText(0), refused, "No plan was made; nothing will move.");
+            return new ProposalResult(null, null, [], 0, PathUtil.FormatBytes(0), refused, "No plan was made; nothing will move.");
 
-        var plan = plans.Issue(guard!, accepted.Select(a => a.Entry).ToList());
-        session.Env.Log.Info($"MCP: plan {plan.Id}: {plan.Entries.Count} item(s), {PathUtil.FormatBytes(total)}; {refused.Count} refused.");
+        var plan = plans.Issue(planGuard!, accepted.Select(a => a.Entry).ToList());
+        session.Env.Log.Info($"MCP: plan {plan.Id}: {plan.Entries.Count} item(s), {PathUtil.FormatBytes(plan.TotalBytes)}; {refused.Count} refused.");
         return new ProposalResult(plan.Id, plan.ExpiresAt,
             plan.Entries.Select(e => new PlannedItem(e.ItemId, e.Item.Path, e.Item.Kind.ToString(), e.Item.Risk.ToString(), e.SizeBytes)).ToList(),
-            total, CandidateItem.SizeText(total), refused,
+            plan.TotalBytes, PathUtil.FormatBytes(plan.TotalBytes), refused,
             "Nothing has moved. Show the user this plan. quarantine_plan will ask them to confirm in a Windows dialog.");
     }
 
-    /// <summary>A plan never holds a folder together with something inside it, so nothing is counted (or moved) twice.</summary>
+    /// <summary>A plan never holds the same path twice, or a folder together with something inside it.</summary>
     private static string? Overlap(string path, List<(PlanEntry Entry, string Path)> accepted)
     {
         foreach (var (_, planned) in accepted)
         {
+            if (PathUtil.AreSame(path, planned)) return $"{planned} is already in this plan.";
             if (PathUtil.IsStrictlyUnder(path, planned)) return $"Already covered by {planned}, which is in this plan.";
             if (PathUtil.IsStrictlyUnder(planned, path)) return $"Contains {planned}, which is already in this plan. Propose the folder on its own.";
         }

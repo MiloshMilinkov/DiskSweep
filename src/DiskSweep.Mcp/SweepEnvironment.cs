@@ -40,7 +40,10 @@ public sealed class SweepEnvironment
         RunScan = (request, status, token) => new ScanEngine().RunAsync(request, status, log, token),
         GetDrives = DriveCatalog.GetDrives,
         QuarantineRootFor = AppPaths.QuarantineRootFor,
-        QuarantineRoots = () => DriveCatalog.GetDrives().Select(d => AppPaths.QuarantineRootFor(d.RootPath)),
+        // Only the drive type, so listing quarantine doesn't wake every disk for its label and free space.
+        QuarantineRoots = () => DriveInfo.GetDrives()
+            .Where(d => d.DriveType is DriveType.Fixed or DriveType.Removable)
+            .Select(d => AppPaths.QuarantineRootFor(d.Name)),
         Approval = approval,
         Log = log,
     };

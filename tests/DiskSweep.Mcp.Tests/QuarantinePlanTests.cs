@@ -1,7 +1,5 @@
 using DiskSweep.Core.Cleanup;
 using DiskSweep.Core.Models;
-using DiskSweep.Core.Safety;
-using DiskSweep.Core.Tests;
 using ModelContextProtocol;
 
 namespace DiskSweep.Mcp.Tests;
@@ -10,13 +8,11 @@ namespace DiskSweep.Mcp.Tests;
 public sealed class QuarantinePlanTests : IDisposable
 {
     private readonly McpTestBed _bed = new();
-    private PlanStore? _plans;
 
     public void Dispose() => _bed.Dispose();
 
-    private PlanStore Plans => _plans ??= new PlanStore(_bed.Session.Env);
-    private CleanupPlanner Planner => new(_bed.Session, Plans);
-    private PlanExecutor Executor => new(_bed.Session.Env, Plans);
+    private CleanupPlanner Planner => _bed.Planner;
+    private PlanExecutor Executor => _bed.Executor;
 
     private async Task<(string PlanId, ScanItem A, ScanItem B)> PlanTwoFilesAsync()
     {
@@ -108,8 +104,7 @@ public sealed class QuarantinePlanTests : IDisposable
     public async Task Forged_blank_and_foreign_plan_ids_are_refused()
     {
         var (_, a, _) = await PlanTwoFilesAsync();
-        var guard = new SafetyGuard(TestLayouts.Synthetic(), Win32FileAttributeProbe.Instance);
-        string foreign = new PlanStore(_bed.Session.Env).Issue(guard, []).Id; // another server session's plan
+        string foreign = new PlanStore(_bed.Session.Env).Issue(_bed.NewGuard(), []).Id; // another server session's plan
 
         foreach (string id in new[] { Guid.NewGuid().ToString("N"), "", "   ", foreign })
         {

@@ -1,6 +1,4 @@
 using DiskSweep.Core.Models;
-using DiskSweep.Core.Safety;
-using DiskSweep.Core.Tests;
 
 namespace DiskSweep.Mcp.Tests;
 
@@ -8,12 +6,11 @@ namespace DiskSweep.Mcp.Tests;
 public sealed class ProposeCleanupTests : IDisposable
 {
     private readonly McpTestBed _bed = new();
-    private PlanStore? _plans;
 
     public void Dispose() => _bed.Dispose();
 
-    private PlanStore Plans => _plans ??= new PlanStore(_bed.Session.Env);
-    private CleanupPlanner Planner => new(_bed.Session, Plans);
+    private PlanStore Plans => _bed.Plans;
+    private CleanupPlanner Planner => _bed.Planner;
 
     [Fact]
     public async Task Safe_and_review_items_make_a_plan_and_nothing_moves()
@@ -165,6 +162,35 @@ public sealed class ProposeCleanupTests : IDisposable
     }
 
     [Fact]
+    public async Task Different_spellings_of_one_id_count_once()
+    {
+        var file = _bed.AddFile("a.tmp", content: "aa");
+        await _bed.ScanAsync();
+        string id = _bed.Id(file);
+        string[] parts = id.Split('-');
+
+        var r = Planner.Propose([id, $"{parts[0]}-0{parts[1]}", $"+{id}", $" {id} "]);
+
+        Assert.Equal(id, Assert.Single(r.Items).Id);
+        Assert.Equal(2, r.TotalBytes);
+        Assert.Empty(r.Refused);
+    }
+
+    [Fact]
+    public async Task Two_scan_items_with_the_same_path_count_once()
+    {
+        _bed.Tree.Dir("shared");
+        var asEmpty = _bed.AddFolder("shared", RiskLevel.Safe, ScanCategory.EmptyFolders);
+        var asLeftover = _bed.AddFolder("shared", RiskLevel.Review, ScanCategory.Leftovers);
+        await _bed.ScanAsync();
+
+        var r = Planner.Propose([_bed.Id(asEmpty), _bed.Id(asLeftover)]);
+
+        Assert.Single(r.Items);
+        Assert.Contains("in this plan", Assert.Single(r.Refused).Reason);
+    }
+
+    [Fact]
     public async Task Unknown_ids_and_stale_scans_are_refused()
     {
         var file = _bed.AddFile("a.tmp");
@@ -195,7 +221,7 @@ public sealed class ProposeCleanupTests : IDisposable
     [Fact]
     public void PlanStore_refuses_forged_used_and_expired_ids()
     {
-        var guard = new SafetyGuard(TestLayouts.Synthetic(), Win32FileAttributeProbe.Instance);
+        var guard = _bed.NewGuard();
         var plan = Plans.Issue(guard, []);
 
         Assert.False(Plans.TryTake(Guid.NewGuid().ToString("N"), out _, out string forged));

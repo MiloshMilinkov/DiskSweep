@@ -41,7 +41,7 @@ public sealed class ScanTools(SweepSession session)
             .Select(g => new CategoryRiskCount(g.Key.Category.ToString(), g.Key.Risk.ToString(), g.Count(), g.Sum(i => i.SizeBytes ?? 0)))
             .ToList();
         long total = scan.Items.Sum(i => i.SizeBytes ?? 0);
-        return new ScanSummary(scan.Number, scan.Target, scan.Items.Count, total, CandidateItem.SizeText(total), breakdown, notes,
+        return new ScanSummary(scan.Number, scan.Target, scan.Items.Count, total, Core.IO.PathUtil.FormatBytes(total), breakdown, notes,
             scan.Result.SkippedTotal, Math.Round(scan.Result.Duration.TotalSeconds, 1), Texts.DataNote);
     }
 
@@ -56,21 +56,22 @@ public sealed class ScanTools(SweepSession session)
         [Description("How many to return (default 50, at most 200).")] int limit = 50,
         [Description("How many to skip, for paging.")] int offset = 0)
     {
-        var scan = session.Latest ?? throw new McpException("No scan yet. Call scan first.");
-        var c = ParseFilter<ScanCategory>(category, "category");
-        var r = ParseFilter<RiskLevel>(risk, "risk");
+        var scan = session.Latest ?? throw new McpException(Texts.NoScan);
+        var c = SweepSession.ParseEnum<ScanCategory>(category, "category");
+        var r = SweepSession.ParseEnum<RiskLevel>(risk, "risk");
         string? folder = string.IsNullOrWhiteSpace(under) ? null : SweepSession.Normalized(under);
+        offset = Math.Max(0, offset);
 
         var matches = scan.Items
             .Select((item, index) => (item, index))
             .Where(x => (c is null || x.item.Category == c) && (r is null || x.item.Risk == r) &&
-                        (folder is null || Core.IO.PathUtil.IsSameOrUnder(SweepSession.Normalized(x.item.Path), folder)))
+                        (folder is null || scan.IsUnder(x.index, folder)))
             .OrderByDescending(x => x.item.SizeBytes ?? -1)
             .ToList();
-        var page = matches.Skip(Math.Max(0, offset)).Take(Math.Clamp(limit, 1, MaxPage))
+        var page = matches.Skip(offset).Take(Math.Clamp(limit, 1, MaxPage))
             .Select(x => CandidateItem.From(scan.IdOf(x.index), x.item))
             .ToList();
-        return new CandidatePage(matches.Count, Math.Max(0, offset), page, Texts.DataNote);
+        return new CandidatePage(matches.Count, offset, page, Texts.DataNote);
     }
 
     [McpServerTool(Name = "explain_item", Title = "Explain one item", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
@@ -78,17 +79,11 @@ public sealed class ScanTools(SweepSession session)
                  "right now. Can't: change anything.")]
     public ItemExplanation ExplainItem([Description("An item id from list_candidates, such as \"3-17\".")] string itemId)
     {
-        if (!session.TryGetItem(itemId, out var scan, out var item, out string error)) throw new McpException(error);
+        if (!session.TryGetItem(itemId, out var found, out string error)) throw new McpException(error);
 
-        var checks = SafetyChecks.Run(session, scan, item);
-        return new ItemExplanation(CandidateItem.From(itemId.Trim(), item), item.Confidence, item.Evidence, item.LastUsedUtc,
+        var item = found.Item;
+        var checks = SafetyChecks.Run(session, found);
+        return new ItemExplanation(CandidateItem.From(found.Id, item), item.Confidence, item.Evidence, item.LastUsedUtc,
             item.LastUsedSource, item.LastModifiedUtc, checks, checks.All(x => x.Passed));
-    }
-
-    private static T? ParseFilter<T>(string? value, string what) where T : struct, Enum
-    {
-        if (string.IsNullOrWhiteSpace(value)) return null;
-        if (Enum.TryParse(value.Trim(), ignoreCase: true, out T parsed) && Enum.IsDefined(parsed)) return parsed;
-        throw new McpException($"Unknown {what} \"{value}\". Use any of: {string.Join(", ", Enum.GetNames<T>())}.");
     }
 }
